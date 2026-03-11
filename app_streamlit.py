@@ -59,16 +59,26 @@ def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, des
 def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        # Lê os dados existentes
-        existing_data = conn.read(worksheet="Página1")
-        # Adiciona a nova linha
-        new_row = pd.DataFrame([dados])
-        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
-        # Grava de volta
-        conn.update(worksheet="Página1", data=updated_df)
+        
+        # 1. Lê os dados atuais
+        df_atual = conn.read(worksheet="Página1")
+        
+        # 2. Cria o novo dado garantindo a ordem das colunas
+        novo_dado = pd.DataFrame([dados])
+        
+        # 3. Força o novo dado a ter as colunas na ordem certa da planilha
+        # Isso evita que ele crie colunas novas se houver erro de nome
+        colunas_planilha = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
+        novo_dado = novo_dado.reindex(columns=colunas_planilha)
+        
+        # 4. Junta e limpa linhas vazias
+        df_final = pd.concat([df_atual, novo_dado], ignore_index=True).dropna(subset=["email"])
+        
+        # 5. Atualiza a planilha
+        conn.update(worksheet="Página1", data=df_final)
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar na planilha: {e}")
+        st.error(f"Erro ao salvar: {e}")
         return False
 
 def get_exchange_rate():
