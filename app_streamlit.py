@@ -31,7 +31,8 @@ SITES_BASE = {
     "LATAM": {"pt": "https://www.latamairlines.com/py/pt", "br": "https://www.latamairlines.com/br/pt"},
     "Air Europa": {"pt": "https://www.aireuropa.com/pt/pt/home", "br": "https://www.aireuropa.com/br/pt/home"},
     "Lufthansa": {"pt": "https://www.lufthansa.com/pt/pt/homepage", "br": "https://www.lufthansa.com/br/pt/homepage"},
-    "British Airways": {"pt": "https://www.britishairways.com/travel/home/public/pt_pt/", "br": "https://www.britishairways.com/travel/home/public/pt_br/"}
+    "British Airways": {"pt": "https://www.britishairways.com/travel/home/public/pt_pt/", "br": "https://www.britishairways.com/travel/home/public/pt_br/"},
+    "Azul Linhas Aéreas": {"pt": "https://www.voeazul.com.br", "br": "https://www.voeazul.com.br"}
 }
 
 cidades = {
@@ -57,7 +58,8 @@ cidades = {
     }
 }
 
-opcoes = []
+# Criando a lista de opções com o Placeholder no início
+opcoes = ["Cidade ou Aeroporto..."]
 mapa_iata = {}
 for regiao, items in cidades.items():
     for nome, iata in items.items():
@@ -75,9 +77,9 @@ with col_moeda:
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 with col1:
-    origem_sel = st.selectbox("Origem:", options=opcoes, index=18) # Lisboa
+    origem_sel = st.selectbox("Origem:", options=opcoes, index=0)
 with col2:
-    destino_sel = st.selectbox("Destino:", options=opcoes, index=0)  # GRU
+    destino_sel = st.selectbox("Destino:", options=opcoes, index=0)
 with col3:
     data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4:
@@ -86,10 +88,14 @@ with col4:
     else:
         data_volta = None
 
-# 4. Busca e Lógica de Preços
+# 4. Busca e Lógica de Processamento
 if st.button("Pesquisar"):
-    if not api_token:
-        st.error("ERRO: Token não encontrado!")
+    if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
+        st.warning("⚠️ Por favor, selecione uma Origem e um Destino válidos.")
+    elif origem_sel == destino_sel:
+        st.warning("⚠️ A Origem e o Destino não podem ser os mesmos.")
+    elif not api_token:
+        st.error("ERRO: Token não encontrado nos Secrets!")
     else:
         try:
             with st.spinner('A localizar voos e verificar câmbio ao vivo...'):
@@ -104,7 +110,6 @@ if st.button("Pesquisar"):
                 if tipo_viagem == "Ida e Volta" and data_volta:
                     slices.append({"origin": mapa_iata[destino_sel], "destination": mapa_iata[origem_sel], "departure_date": str(data_volta)})
 
-                # Payload com solicitação de moeda específica para tentar tarifas de mercado local
                 payload = {
                     "data": {
                         "slices": slices, 
@@ -128,7 +133,6 @@ if st.button("Pesquisar"):
                             preco_base = float(o["total_amount"])
                             moeda_api = o["total_currency"]
 
-                            # Lógica de Conversão Dinâmica
                             if is_br:
                                 preco_exibicao = preco_base if moeda_api == "BRL" else preco_base * cotacao_atual
                                 simbolo = "R$"
@@ -136,7 +140,6 @@ if st.button("Pesquisar"):
                                 preco_exibicao = preco_base if moeda_api == "EUR" else preco_base / cotacao_atual
                                 simbolo = "€"
 
-                            # Lógica de Link Regional e Moeda no Skyscanner
                             if cia_nome in SITES_BASE:
                                 link_final = SITES_BASE[cia_nome]["br" if is_br else "pt"]
                             else:
@@ -165,10 +168,10 @@ if st.button("Pesquisar"):
                             hide_index=True, use_container_width=True
                         )
                         if is_br:
-                            st.info("💡 **Dica para Voos Domésticos:** APIs internacionais podem mostrar tarifas mais caras para o Brasil. Clique em 'Ver Preço Real' para abrir o Skyscanner Brasil com as tarifas locais.")
-                            st.caption(f"ℹ️ Câmbio utilizado: 1€ = R$ {cotacao_atual:.2f}")
+                            st.info("💡 **Dica:** Para voos domésticos no Brasil, o link acima abrirá o Skyscanner BR com as tarifas locais (geralmente muito mais baratas).")
+                            st.caption(f"ℹ️ Câmbio ao vivo: 1€ = R$ {cotacao_atual:.2f}")
                     else:
-                        st.warning("Sem voos disponíveis para estas datas.")
+                        st.warning("Sem voos disponíveis para estas cidades/datas.")
                 else:
                     st.error(f"Erro na API Duffel: {res.text}")
         except Exception as e:
