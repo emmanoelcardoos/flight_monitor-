@@ -45,25 +45,25 @@ st.title("🌍 Flight Monitor - Buscador GDS")
 
 col_tipo, col_moeda = st.columns([3, 1])
 with col_tipo:
-    tipo_viagem = st.radio("Tipo de Viagem", ["Só Ida", "Ida e Volta"], horizontal=True)
+    tipo_viagem = st.radio("Tipo de Viagem", ["Só Ida/Volta", "Ida e Volta"], horizontal=True)
 with col_moeda:
-    moeda_pref = st.selectbox("💰 Moeda e Região", ["Euro (€) - Site .PT", "Real (R$) - Site .BR"])
+    moeda_pref = st.selectbox("Moeda e Região", ["Euro (€) - (Site .PT)", "Real (R$) - (Site .BR)"])
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 with col1:
-    origem_sel = st.selectbox("✈️ De Onde?", options=opcoes, index=0)
+    origem_sel = st.selectbox("Origem: ", options=opcoes, index=0)
 with col2:
-    destino_sel = st.selectbox("📍 Para Onde?", options=opcoes, index=3)
+    destino_sel = st.selectbox("Destino", options=opcoes, index=3)
 with col3:
-    data_ida = st.date_input("📅 Data de Ida", min_value=datetime.today())
+    data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4:
     if tipo_viagem == "Ida e Volta":
-        data_volta = st.date_input("📅 Data de Volta", min_value=data_ida + timedelta(days=1))
+        data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1))
     else:
         data_volta = None
 
 # 4. Busca
-if st.button("🔍 PROCURAR MELHORES PREÇOS"):
+if st.button("Pesquisar"):
     if not api_token:
         st.error("ERRO: Token não encontrado!")
     else:
