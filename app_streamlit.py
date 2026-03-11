@@ -11,58 +11,70 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="centered")
 
 # --- ESTILO CSS PREMIUM (GOOGLE FLIGHTS STYLE) ---
+# --- ESTILO CSS SUAVIZADO ---
 st.markdown("""
     <style>
-    /* Fundo e Reset */
+    /* 1. Fundo Off-White (Menos cansaço visual) */
     .stApp {
-        background-color: #f5f7fb !important;
+        background-color: #F8FAFC !important;
     }
     
-    /* Card Central de Busca */
+    /* 2. Card Branco com Sombra Sutil */
     [data-testid="stVerticalBlock"] > div:has(div.stButton) {
-        background-color: white !important;
-        padding: 32px !important;
-        border-radius: 16px !important;
-        box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05) !important;
-    }
-
-    /* Inputs e Selects Modernos */
-    div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, .stNumberInput div {
         background-color: #ffffff !important;
-        border: 1px solid #e5e7eb !important;
-        border-radius: 10px !important;
-        color: #1f2937 !important;
-    }
-    
-    input {
-        color: #1f2937 !important;
-        font-weight: 500 !important;
+        padding: 40px !important;
+        border-radius: 20px !important;
+        box-shadow: 0 10px 25px rgba(148, 163, 184, 0.1) !important;
+        border: 1px solid #E2E8F0 !important;
     }
 
-    /* Labels de inputs */
-    label p {
-        font-size: 0.85rem !important;
-        font-weight: 600 !important;
-        color: #6b7280 !important;
+    /* 3. Inputs: Fim das barras pretas */
+    /* Vamos forçar um cinza muito claro e bordas suaves */
+    div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, .stNumberInput div, div[data-testid="stPopover"] > button {
+        background-color: #F1F5F9 !important; /* Cinza claro suave */
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        color: #334155 !important;
+        height: 45px !important;
     }
 
-    /* Botão Pesquisar Azul */
-    .stButton > button {
+    /* Cor do texto dentro dos campos */
+    input, select, span, p, label {
+        color: #334155 !important; /* Azul escuro acinzentado (não é preto puro) */
+    }
+
+    /* Botão Passageiros (Popover) mais elegante */
+    div[data-testid="stPopover"] > button {
         width: 100% !important;
-        background-color: #2563eb !important;
+        border: 1px solid #E2E8F0 !important;
+    }
+
+    /* 4. Botão Pesquisar (Azul Skyscanner) */
+    .stButton > button {
+        background-color: #0062E3 !important;
         color: white !important;
         border-radius: 12px !important;
-        height: 52px !important;
+        height: 50px !important;
         font-weight: 600 !important;
+        font-size: 16px !important;
         border: none !important;
+        transition: all 0.2s ease-in-out !important;
     }
     .stButton > button:hover {
-        background-color: #1d4ed8 !important;
-        box-shadow: 0 10px 15px -3px rgba(37, 99, 235, 0.3) !important;
+        background-color: #004db3 !important;
+        transform: translateY(-1px) !important;
+        box-shadow: 0 4px 12px rgba(0, 98, 227, 0.2) !important;
     }
 
-    /* Esconder Menu Streamlit */
+    /* 5. Títulos Suaves */
+    h1 {
+        color: #0F172A !important;
+        font-weight: 700 !important;
+    }
+    
+    /* Remover linhas e menus inúteis */
     #MainMenu, header, footer {visibility: hidden;}
+    .stDeployButton {display:none;}
     </style>
     """, unsafe_allow_html=True)
 
@@ -212,28 +224,70 @@ if btn_pesquisar:
         except Exception as e: st.error(f"Erro: {e}")
 
 # --- EXIBIÇÃO E ALERTA ---
+# --- EXIBIÇÃO DE RESULTADOS (CORRIGIDA COM LINKS CLICÁVEIS) ---
 if "voos" in st.session_state:
-    st.write("### ✈️ Melhores Ofertas Encontradas")
-    df_view = pd.DataFrame(st.session_state.voos)
-    st.dataframe(df_view[["Companhia", "Preço", "Link"]], use_container_width=True, hide_index=True)
-
     st.markdown("---")
-    st.write("### 📬 Ativar Alerta de Preço")
-    st.info(f"Monitorando para: {adultos} Ad, {criancas} Cr, {bebes} Be")
+    st.markdown("<h3 style='color: #334155;'>✈️ Melhores Ofertas Encontradas</h3>", unsafe_allow_html=True)
     
-    c_mail, c_btn = st.columns([3, 1])
-    with c_mail: email_user = st.text_input("E-mail para alertas:", placeholder="seu@email.com")
-    with c_btn:
-        if st.button("Ativar Alerta"):
-            if "@" in email_user:
-                dados = {
-                    "email": email_user, "itinerario": st.session_state.itinerario,
-                    "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel],
-                    "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "",
-                    "adultos": adultos, "criancas": criancas, "bebes": bebes,
-                    "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.voos[0]["Símbolo"]
-                }
-                if guardar_alerta_planilha(dados):
-                    st.success("Alerta ativado com sucesso!")
-            else: st.error("E-mail inválido.")
-     
+    # Criamos o DataFrame
+    df = pd.DataFrame(st.session_state.voos)
+    
+    # Definimos as colunas que queremos mostrar
+    # Nota: A coluna "Link" deve conter a URL completa (ex: https://...)
+    colunas_visiveis = ["Destino", "Companhia", "Preço", "Link"]
+    simb = st.session_state.voos[0]["Símbolo"]
+
+    # Exibição com configuração de coluna de Link
+    st.dataframe(
+        df[colunas_visiveis], 
+        column_config={
+            "Preço": st.column_config.NumberColumn(f"Preço ({simb})", format=f"{simb} %.2f"),
+            "Link": st.column_config.LinkColumn(
+                "Reservar", 
+                display_text="Ver Oferta ✈️",  # O que aparece no botão
+                help="Clique para abrir no Skyscanner"
+            )
+        },
+        hide_index=True, 
+        use_container_width=True
+    )
+    
+    # Informação de Câmbio (apenas se for Real)
+    if st.session_state.get("is_br"):
+        st.caption(f"ℹ️ Câmbio utilizado: 1€ = R$ {st.session_state.cotacao:.2f}")
+
+    # --- SEÇÃO DE ALERTA ---
+    st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
+    with st.container():
+        st.markdown("<h3 style='color: #334155;'>📬 Ativar Alerta de Preço</h3>", unsafe_allow_html=True)
+        st.markdown(f"<p style='color: #64748B;'>Monitorizar para: {adultos} Adulto(s), {criancas} Criança(s) e {bebes} Bebé(s)</p>", unsafe_allow_html=True)
+        
+        c_mail, c_btn = st.columns([3, 1])
+        with c_mail:
+            email_user = st.text_input("Teu e-mail:", key="email_input", label_visibility="collapsed", placeholder="exemplo@gmail.com")
+        with c_btn:
+            if st.button("Ativar Alerta", use_container_width=True):
+                if "@" in email_user:
+                    with st.spinner("A processar..."):
+                        # Captura códigos IATA para o alerta
+                        orig_cod = mapa_iata.get(origem_sel)
+                        dest_cod = mapa_iata.get(destino_sel) if destino_sel != "🌍 EXPLORAR QUALQUER LUGAR" else "EXPLORE"
+                        
+                        dados_alerta = {
+                            "email": email_user,
+                            "itinerario": st.session_state.itinerario,
+                            "origem": orig_cod,
+                            "destino": dest_cod,
+                            "data": str(data_ida),
+                            "data_volta": str(data_volta) if data_volta else "",
+                            "adultos": adultos,
+                            "criancas": criancas,
+                            "bebes": bebes,
+                            "preco_inicial": st.session_state.voos[0]["Preço"],
+                            "moeda": simb
+                        }
+                        
+                        if guardar_alerta_planilha(dados_alerta):
+                            st.success(f"✅ Alerta configurado para {email_user}!")
+                else:
+                    st.error("Insere um e-mail válido.")
