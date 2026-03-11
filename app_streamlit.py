@@ -251,7 +251,7 @@ if "voos" in st.session_state:
                     # 2. Guardar na Planilha para o Robô consultar depois
                     dados_alerta = {
                         "email": email_user,
-                        "itinerario": st.session_state.itinerario,
+                        "itinerario": st.session_state.itinerario,  # Coluna B
                         "origem": orig_cod,
                         "destino": dest_cod,
                         "data": str(data_ida),
