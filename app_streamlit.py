@@ -71,7 +71,6 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- INTERFACE (CABEÇALHO) ---
-# Dividimos o topo em 2: Título e Moeda
 header_col1, header_col2 = st.columns([4, 1])
 
 with header_col1:
@@ -79,12 +78,20 @@ with header_col1:
     tipo_viagem = st.radio("Configuração:", ["Só Ida/Volta", "Ida e Volta"], horizontal=True, label_visibility="collapsed")
 
 with header_col2:
-    st.write("") # Espaçamento
+    # Mantemos a moeda no canto superior direito
     moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"], key="moeda_header")
 
-st.write("---")
+st.write("") # Pequeno espaço
 
-# --- BARRA DE PESQUISA (LINHA ÚNICA ALINHADA) ---
+# --- TÍTULOS AUXILIARES (Para o utilizador saber o que é cada campo) ---
+t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
+t_col1.caption("🛫 Origem")
+t_col2.caption("🛬 Destino")
+t_col3.caption("📅 Ida")
+if tipo_viagem == "Ida e Volta":
+    t_col4.caption("📅 Volta")
+
+# --- BARRA DE PESQUISA (A "Régua" Alinhada) ---
 col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
 
 with col1:
@@ -97,10 +104,11 @@ with col4:
     if tipo_viagem == "Ida e Volta":
         data_volta = st.date_input("Volta", min_value=data_ida + timedelta(days=1), label_visibility="collapsed")
     else:
+        # Espaço vazio desativado apenas para manter o alinhamento da régua
+        st.button("---", disabled=True, use_container_width=True, key="spacer_btn")
         data_volta = None
-        st.button("Calendário", disabled=True, use_container_width=True) # Apenas para manter o alinhamento visual
 with col5:
-    btn_pesquisar = st.button("Pesquisar", use_container_width=True)
+    btn_pesquisar = st.button("Pesquisar", use_container_width=True, type="primary")
 
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
