@@ -60,32 +60,34 @@ def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # 1. Lê os dados, mas se der erro ou estiver vazio, cria um DataFrame novo
+        # 1. Tentar ler o que já existe. Se estiver vazio, criamos um DataFrame com as colunas certas
+        colunas_certas = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
         try:
             df_atual = conn.read(worksheet="Página1")
+            # Se a folha existir mas estiver vazia, garantimos que tem as colunas
+            if df_atual.empty:
+                df_atual = pd.DataFrame(columns=colunas_certas)
         except:
-            df_atual = pd.DataFrame()
+            df_atual = pd.DataFrame(columns=colunas_certas)
 
-        # 2. Criar o novo dado (em minúsculas e sem acentos)
+        # 2. Criar o novo dado como uma nova linha
         novo_dado = pd.DataFrame([dados])
         
-        # 3. Forçar a ordem das colunas para bater com o Robô
-        colunas_certas = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
+        # 3. Forçar a ordem das colunas para bater com o cabeçalho
         novo_dado = novo_dado.reindex(columns=colunas_certas)
 
-        # 4. Juntar ao que já existia (se existir)
-        if not df_atual.empty:
-            # Garante que o df_atual também usa os nomes sem acento antes de juntar
-            df_atual.columns = colunas_certas[:len(df_atual.columns)] 
-            df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
-        else:
-            df_final = novo_dado
+        # 4. A MAGIA: Concatenar (juntar) o novo dado ao final do antigo
+        # ignore_index=True garante que ele cria uma linha nova (0, 1, 2, 3...)
+        df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
 
-        # 5. O TRUQUE: Re-escrever TUDO incluindo o cabeçalho novo
+        # 5. Remover linhas que estejam totalmente vazias (limpeza extra)
+        df_final = df_final.dropna(how='all')
+
+        # 6. Atualizar a planilha inteira com a nova lista aumentada
         conn.update(worksheet="Página1", data=df_final)
         return True
     except Exception as e:
-        st.error(f"Erro ao salvar: {e}")
+        st.error(f"Erro ao guardar alerta: {e}")
         return False
 
 def get_exchange_rate():
