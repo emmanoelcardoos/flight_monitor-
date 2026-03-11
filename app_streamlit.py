@@ -14,55 +14,51 @@ import streamlit as st
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
 # --- ESTILO CSS PERSONALIZADO ---
+# --- ESTILO CSS BLINDADO ---
 st.markdown("""
     <style>
-    /* Fundo da página e fontes */
+    /* Forçar o fundo e cores globais */
     .stApp {
-        background-color: #f8f9fa;
-        font-family: 'Inter', sans-serif;
+        background-color: #F0F2F5 !important;
     }
     
-    /* Estilização dos blocos (Cards) */
-    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
-        background-color: white;
-        padding: 20px;
-        border-radius: 15px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    /* Títulos e Textos principais sempre escuros */
+    h1, h2, h3, h4, h5, p, label, .stMarkdown {
+        color: #1E293B !important;
     }
 
-    /* Botão Principal */
+    /* Estilização dos inputs para serem visíveis */
+    .stSelectbox div[data-baseweb="select"], 
+    .stTextInput input, 
+    .stDateInput input,
+    .stNumberInput input {
+        background-color: white !important;
+        color: #1E293B !important;
+        border-radius: 10px !important;
+        border: 1px solid #CBD5E1 !important;
+    }
+
+    /* Botão Pesquisar - Azul Vibrante */
     .stButton > button {
-        border-radius: 8px;
-        height: 3em;
-        background-color: #007bff;
-        color: white;
-        border: none;
-        font-weight: 600;
-        transition: all 0.3s;
-    }
-    .stButton > button:hover {
-        background-color: #0056b3;
-        box-shadow: 0 4px 15px rgba(0,123,255,0.3);
-        transform: translateY(-2px);
+        border-radius: 10px !important;
+        height: 3em !important;
+        background-color: #0070F3 !important;
+        color: white !important;
+        font-weight: bold !important;
+        border: none !important;
+        width: 100% !important;
     }
 
-    /* Inputs e Selects */
-    .stSelectbox, .stTextInput, .stDateInput {
-        background-color: white;
-        border-radius: 10px;
-    }
-
-    /* Títulos */
-    h1 {
-        color: #1e293b;
-        font-weight: 800 !important;
-        letter-spacing: -1px;
+    /* Cards de resultados */
+    div[data-testid="stExpander"], div.stDataFrame {
+        background-color: white !important;
+        border-radius: 15px !important;
+        padding: 10px !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
     
-    /* Estilo para a área de alertas */
-    .stAlert {
-        border-radius: 12px;
-    }
+    /* Corrigir ícones e textos de ajuda */
+    .stTooltipIcon { color: #64748B !important; }
     </style>
     """, unsafe_allow_html=True)
 
