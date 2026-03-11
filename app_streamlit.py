@@ -6,23 +6,23 @@ from datetime import datetime, timedelta
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# Função para pegar cotação ao vivo
+# Função para pegar cotação ao vivo (Conversão de Moeda)
 def get_exchange_rate():
     try:
-        # Usando uma API gratuita de câmbio (sem necessidade de chave para uso simples)
         res = requests.get("https://open.er-api.com/v6/latest/EUR")
         data = res.json()
         return data["rates"]["BRL"]
     except:
-        return 6.15 # Valor de segurança caso a API de câmbio falhe
+        return 6.15 # Fallback caso a API de câmbio falhe
 
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #007bff; color: white; font-weight: bold; }
+    .main { background-color: #f8f9fa; }
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Configurações
+# 2. Configurações e Base de Dados
 api_token = st.secrets.get("DUFFEL_TOKEN")
 
 SITES_BASE = {
@@ -64,7 +64,7 @@ for regiao, items in cidades.items():
         opcoes.append(nome)
         mapa_iata[nome] = iata
 
-# 3. Interface
+# 3. Interface de Utilizador
 st.title("🌍 Flight Monitor - Buscador GDS")
 
 col_tipo, col_moeda = st.columns([3, 1])
@@ -75,9 +75,9 @@ with col_moeda:
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 with col1:
-    origem_sel = st.selectbox("Origem:", options=opcoes, index=18) # LIS
+    origem_sel = st.selectbox("Origem:", options=opcoes, index=18) # Lisboa
 with col2:
-    destino_sel = st.selectbox("Destino:", options=opcoes, index=0) # GRU
+    destino_sel = st.selectbox("Destino:", options=opcoes, index=0)  # GRU
 with col3:
     data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4:
@@ -86,24 +86,34 @@ with col4:
     else:
         data_volta = None
 
-# 4. Busca
+# 4. Busca e Lógica de Preços
 if st.button("Pesquisar"):
     if not api_token:
         st.error("ERRO: Token não encontrado!")
     else:
         try:
             with st.spinner('A localizar voos e verificar câmbio ao vivo...'):
-                # Pega a cotação do momento
                 cotacao_atual = get_exchange_rate()
-                
                 url = "https://api.duffel.com/air/offer_requests"
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+
+                is_br = "Real" in moeda_pref
+                moeda_busca = "BRL" if is_br else "EUR"
 
                 slices = [{"origin": mapa_iata[origem_sel], "destination": mapa_iata[destino_sel], "departure_date": str(data_ida)}]
                 if tipo_viagem == "Ida e Volta" and data_volta:
                     slices.append({"origin": mapa_iata[destino_sel], "destination": mapa_iata[origem_sel], "departure_date": str(data_volta)})
 
-                payload = {"data": {"slices": slices, "passengers": [{"type": "adult"}], "cabin_class": "economy"}}
+                # Payload com solicitação de moeda específica para tentar tarifas de mercado local
+                payload = {
+                    "data": {
+                        "slices": slices, 
+                        "passengers": [{"type": "adult"}], 
+                        "cabin_class": "economy",
+                        "requested_currencies": [moeda_busca]
+                    }
+                }
+                
                 res = requests.post(url, headers=headers, json=payload)
                 
                 if res.status_code == 201:
@@ -113,25 +123,32 @@ if st.button("Pesquisar"):
 
                     if offers_data:
                         voos_finais = []
-                        is_br = "Real" in moeda_pref
-                        
                         for o in offers_data:
                             cia_nome = o["owner"]["name"]
                             preco_base = float(o["total_amount"])
-                            
-                            # Conversão Dinâmica
-                            preco_exibicao = preco_base * cotacao_atual if is_br else preco_base
-                            simbolo = "R$" if is_br else "€"
+                            moeda_api = o["total_currency"]
 
+                            # Lógica de Conversão Dinâmica
+                            if is_br:
+                                preco_exibicao = preco_base if moeda_api == "BRL" else preco_base * cotacao_atual
+                                simbolo = "R$"
+                            else:
+                                preco_exibicao = preco_base if moeda_api == "EUR" else preco_base / cotacao_atual
+                                simbolo = "€"
+
+                            # Lógica de Link Regional e Moeda no Skyscanner
                             if cia_nome in SITES_BASE:
                                 link_final = SITES_BASE[cia_nome]["br" if is_br else "pt"]
                             else:
                                 iata_orig, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
                                 data_str = data_ida.strftime("%y%m%d")
-                                tld = "com.br" if is_br else "pt"
-                                link_sky = f"https://www.skyscanner.{tld}/transport/flights/{iata_orig}/{iata_dest}/{data_str}/"
+                                if is_br:
+                                    link_sky = f"https://www.skyscanner.com.br/transport/flights/{iata_orig}/{iata_dest}/{data_str}/?curr=BRL"
+                                else:
+                                    link_sky = f"https://www.skyscanner.pt/transport/flights/{iata_orig}/{iata_dest}/{data_str}/?curr=EUR"
+                                
                                 if data_volta:
-                                    link_sky += f"{data_volta.strftime('%y%m%d')}/"
+                                    link_sky = link_sky.replace(f"/{data_str}/", f"/{data_str}/{data_volta.strftime('%y%m%d')}/")
                                 link_final = link_sky
 
                             voos_finais.append({"Companhia": cia_nome, "Preço": preco_exibicao, "Link": link_final})
@@ -143,15 +160,16 @@ if st.button("Pesquisar"):
                             df,
                             column_config={
                                 "Preço": st.column_config.NumberColumn(f"Preço ({simbolo})", format=f"{simbolo} %.2f"),
-                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver Oferta Regional")
+                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver Preço Real no Skyscanner" if is_br else "Ver Oferta Oficial")
                             },
                             hide_index=True, use_container_width=True
                         )
                         if is_br:
-                            st.caption(f"ℹ️ Cotação do momento: 1€ = R$ {cotacao_atual:.2f}")
+                            st.info("💡 **Dica para Voos Domésticos:** APIs internacionais podem mostrar tarifas mais caras para o Brasil. Clique em 'Ver Preço Real' para abrir o Skyscanner Brasil com as tarifas locais.")
+                            st.caption(f"ℹ️ Câmbio utilizado: 1€ = R$ {cotacao_atual:.2f}")
                     else:
-                        st.warning("Sem voos para estas datas.")
+                        st.warning("Sem voos disponíveis para estas datas.")
                 else:
-                    st.error(f"Erro na API: {res.text}")
+                    st.error(f"Erro na API Duffel: {res.text}")
         except Exception as e:
-            st.error(f"Erro: {e}")
+            st.error(f"Erro inesperado: {e}")
