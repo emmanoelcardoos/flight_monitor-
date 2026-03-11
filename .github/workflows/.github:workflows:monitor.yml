@@ -1,0 +1,30 @@
+name: Monitor Diário de Voos
+
+on:
+  schedule:
+    # Corre todos os dias às 09:00 UTC (ajusta o cron se preferires)
+    - cron: '0 9 * * *'
+  workflow_dispatch: # Permite-te clicar num botão para correr o robô manualmente
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar Código
+        uses: actions/checkout@v3
+
+      - name: Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Instalar Dependências
+        run: pip install requests pandas
+
+      - name: Executar Monitorização
+        env:
+          DUFFEL_TOKEN: ${{ secrets.DUFFEL_TOKEN }}
+          EMAIL_USER: ${{ secrets.EMAIL_USER }}
+          EMAIL_PASSWORD: ${{ secrets.EMAIL_PASSWORD }}
+          SHEET_URL: ${{ secrets.SHEET_URL }}
+        run: python worker.py
