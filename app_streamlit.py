@@ -111,4 +111,4 @@ if st.button("🔍 Procurar Melhores Preços"):
             st.error(f"Ocorreu um erro inesperado: {e}")
 
 st.markdown("---")
-st.caption("Desenvolvido por Emmanoel para uso familiar.")
+st.caption("Desenvolvido por Emmanoel.")
