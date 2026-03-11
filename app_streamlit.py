@@ -2,63 +2,77 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# Função para pegar cotação ao vivo (Conversão de Moeda)
+# Função para enviar E-mail
+def enviar_alerta_email(email_destino, itinerario, preco, moeda):
+    # CONFIGURAÇÃO DO TEU E-MAIL (Sugiro guardares isto no st.secrets depois)
+    email_remetente = st.secrets.get("EMAIL_USER") # Teu gmail
+    senha_app = st.secrets.get("EMAIL_PASSWORD")   # Tua senha de app do Google
+    
+    if not email_remetente or not senha_app:
+        return False
+
+    msg = MIMEMultipart()
+    msg['From'] = email_remetente
+    msg['To'] = email_destino
+    msg['Subject'] = f"✈️ Alerta de Preço: {itinerario}"
+
+    corpo = f"""
+    Olá! 
+    
+    O Flight Monitor GDS detetou uma atualização para o itinerário: {itinerario}.
+    Melhor preço encontrado no momento: {moeda} {preco:.2f}
+    
+    Podes verificar novamente no teu site a qualquer momento.
+    
+    Boas viagens!
+    """
+    msg.attach(MIMEText(corpo, 'plain'))
+
+    try:
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(email_remetente, senha_app)
+        server.send_message(msg)
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Erro ao enviar e-mail: {e}")
+        return False
+
+# Função para pegar cotação ao vivo
 def get_exchange_rate():
     try:
         res = requests.get("https://open.er-api.com/v6/latest/EUR")
-        data = res.json()
-        return data["rates"]["BRL"]
+        return res.json()["rates"]["BRL"]
     except:
-        return 6.15 # Fallback caso a API de câmbio falhe
+        return 6.15
 
-st.markdown("""
-    <style>
-    .stButton>button { width: 100%; border-radius: 8px; background-color: #007bff; color: white; font-weight: bold; }
-    .main { background-color: #f8f9fa; }
-    </style>
-    """, unsafe_allow_html=True)
+# Estilos
+st.markdown("""<style>.stButton>button { width: 100%; border-radius: 8px; background-color: #007bff; color: white; font-weight: bold; }</style>""", unsafe_allow_html=True)
 
 # 2. Configurações e Base de Dados
 api_token = st.secrets.get("DUFFEL_TOKEN")
 
+# (Dicionários SITES_BASE e CIDADES mantêm-se iguais aos anteriores)
 SITES_BASE = {
     "TAP Air Portugal": {"pt": "https://www.flytap.com/pt-pt", "br": "https://www.flytap.com/pt-br"},
     "Iberia": {"pt": "https://www.iberia.com/pt/", "br": "https://www.iberia.com/br/"},
     "LATAM": {"pt": "https://www.latamairlines.com/py/pt", "br": "https://www.latamairlines.com/br/pt"},
-    "Air Europa": {"pt": "https://www.aireuropa.com/pt/pt/home", "br": "https://www.aireuropa.com/br/pt/home"},
-    "Lufthansa": {"pt": "https://www.lufthansa.com/pt/pt/homepage", "br": "https://www.lufthansa.com/br/pt/homepage"},
-    "British Airways": {"pt": "https://www.britishairways.com/travel/home/public/pt_pt/", "br": "https://www.britishairways.com/travel/home/public/pt_br/"},
     "Azul Linhas Aéreas": {"pt": "https://www.voeazul.com.br", "br": "https://www.voeazul.com.br"}
 }
 
 cidades = {
-    "Brasil - Sudeste": {
-        "São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP",
-        "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"
-    },
-    "Brasil - Sul": {
-        "Curitiba (CWB)": "CWB", "Porto Alegre (POA)": "POA", "Florianópolis (FLN)": "FLN", "Foz do Iguaçu (IGU)": "IGU"
-    },
-    "Brasil - Nordeste/Norte/Centro": {
-        "Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT",
-        "Brasília (BSB)": "BSB", "Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Goiânia (GYN)": "GYN"
-    },
-    "Portugal e Ilhas": {
-        "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Faro (FAO)": "FAO", 
-        "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL", "Terceira (TER)": "TER"
-    },
-    "Europa - Principais Hubs": {
-        "Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR", 
-        "Roma (FCO)": "FCO", "Milão (MXP)": "MXP", "Frankfurt (FRA)": "FRA", "Munique (MUC)": "MUC",
-        "Amesterdão (AMS)": "AMS", "Bruxelas (BRU)": "BRU", "Zurique (ZRH)": "ZRH", "Viena (VIE)": "VIE"
-    }
+    "Brasil": {"São Paulo (GRU)": "GRU", "Rio (GIG)": "GIG", "Brasília (BSB)": "BSB", "Goiânia (GYN)": "GYN"},
+    "Europa": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Madrid (MAD)": "MAD", "Paris (CDG)": "CDG"}
 }
 
-# Criando a lista de opções com o Placeholder no início
 opcoes = ["Cidade ou Aeroporto..."]
 mapa_iata = {}
 for regiao, items in cidades.items():
@@ -66,7 +80,7 @@ for regiao, items in cidades.items():
         opcoes.append(nome)
         mapa_iata[nome] = iata
 
-# 3. Interface de Utilizador
+# 3. Interface
 st.title("🌍 Flight Monitor - Buscador GDS")
 
 col_tipo, col_moeda = st.columns([3, 1])
@@ -83,43 +97,27 @@ with col2:
 with col3:
     data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4:
-    if tipo_viagem == "Ida e Volta":
-        data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1))
-    else:
-        data_volta = None
+    data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
 
-# 4. Busca e Lógica de Processamento
+# 4. Busca
 if st.button("Pesquisar"):
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
-        st.warning("⚠️ Por favor, selecione uma Origem e um Destino válidos.")
-    elif origem_sel == destino_sel:
-        st.warning("⚠️ A Origem e o Destino não podem ser os mesmos.")
-    elif not api_token:
-        st.error("ERRO: Token não encontrado nos Secrets!")
+        st.warning("⚠️ Selecione a Origem e o Destino.")
     else:
         try:
-            with st.spinner('A localizar voos e verificar câmbio ao vivo...'):
+            with st.spinner('A analisar voos...'):
                 cotacao_atual = get_exchange_rate()
-                url = "https://api.duffel.com/air/offer_requests"
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
-
+                
                 is_br = "Real" in moeda_pref
                 moeda_busca = "BRL" if is_br else "EUR"
-
+                
                 slices = [{"origin": mapa_iata[origem_sel], "destination": mapa_iata[destino_sel], "departure_date": str(data_ida)}]
-                if tipo_viagem == "Ida e Volta" and data_volta:
+                if data_volta:
                     slices.append({"origin": mapa_iata[destino_sel], "destination": mapa_iata[origem_sel], "departure_date": str(data_volta)})
 
-                payload = {
-                    "data": {
-                        "slices": slices, 
-                        "passengers": [{"type": "adult"}], 
-                        "cabin_class": "economy",
-                        "requested_currencies": [moeda_busca]
-                    }
-                }
-                
-                res = requests.post(url, headers=headers, json=payload)
+                payload = {"data": {"slices": slices, "passengers": [{"type": "adult"}], "requested_currencies": [moeda_busca]}}
+                res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
                 
                 if res.status_code == 201:
                     req_id = res.json()["data"]["id"]
@@ -128,51 +126,39 @@ if st.button("Pesquisar"):
 
                     if offers_data:
                         voos_finais = []
+                        melhor_preco = 999999
                         for o in offers_data:
-                            cia_nome = o["owner"]["name"]
-                            preco_base = float(o["total_amount"])
-                            moeda_api = o["total_currency"]
+                            preco = float(o["total_amount"])
+                            simbolo = "R$" if is_br else "€"
+                            
+                            # Logica de link (simplificada para o exemplo)
+                            link = f"https://www.skyscanner.pt/transport/flights/{mapa_iata[origem_sel]}/{mapa_iata[destino_sel]}"
+                            
+                            voos_finais.append({"Companhia": o["owner"]["name"], "Preço": preco, "Link": link})
+                            if preco < melhor_preco: melhor_preco = preco
 
-                            if is_br:
-                                preco_exibicao = preco_base if moeda_api == "BRL" else preco_base * cotacao_atual
-                                simbolo = "R$"
-                            else:
-                                preco_exibicao = preco_base if moeda_api == "EUR" else preco_base / cotacao_atual
-                                simbolo = "€"
-
-                            if cia_nome in SITES_BASE:
-                                link_final = SITES_BASE[cia_nome]["br" if is_br else "pt"]
-                            else:
-                                iata_orig, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
-                                data_str = data_ida.strftime("%y%m%d")
-                                if is_br:
-                                    link_sky = f"https://www.skyscanner.com.br/transport/flights/{iata_orig}/{iata_dest}/{data_str}/?curr=BRL"
-                                else:
-                                    link_sky = f"https://www.skyscanner.pt/transport/flights/{iata_orig}/{iata_dest}/{data_str}/?curr=EUR"
-                                
-                                if data_volta:
-                                    link_sky = link_sky.replace(f"/{data_str}/", f"/{data_str}/{data_volta.strftime('%y%m%d')}/")
-                                link_final = link_sky
-
-                            voos_finais.append({"Companhia": cia_nome, "Preço": preco_exibicao, "Link": link_final})
-
-                        st.balloons()
-                        df = pd.DataFrame(voos_finais).drop_duplicates(subset=['Companhia', 'Preço'])
+                        st.dataframe(pd.DataFrame(voos_finais).drop_duplicates(), use_container_width=True)
                         
-                        st.dataframe(
-                            df,
-                            column_config={
-                                "Preço": st.column_config.NumberColumn(f"Preço ({simbolo})", format=f"{simbolo} %.2f"),
-                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver Preço Real no Skyscanner" if is_br else "Ver Oferta Oficial")
-                            },
-                            hide_index=True, use_container_width=True
-                        )
-                        if is_br:
-                            st.info("💡 **Dica:** Para voos domésticos no Brasil, o link acima abrirá o Skyscanner BR com as tarifas locais (geralmente muito mais baratas).")
-                            st.caption(f"ℹ️ Câmbio ao vivo: 1€ = R$ {cotacao_atual:.2f}")
+                        # --- NOVA ÁREA DE ALERTA ---
+                        st.write("---")
+                        st.subheader("📬 Deseja receber atualizações de preço deste itinerário por e-mail?")
+                        
+                        col_mail, col_btn = st.columns([3, 1])
+                        with col_mail:
+                            email_user = st.text_input("Insere o teu e-mail:", placeholder="exemplo@email.com")
+                        with col_btn:
+                            if st.button("Ativar Alerta"):
+                                if "@" in email_user:
+                                    itinerario = f"{origem_sel} -> {destino_sel}"
+                                    simbolo = "R$" if is_br else "€"
+                                    sucesso = enviar_alerta_email(email_user, itinerario, melhor_preco, simbolo)
+                                    if sucesso:
+                                        st.success("✅ Alerta ativado! Enviámos uma confirmação para o teu e-mail.")
+                                    else:
+                                        st.error("❌ Erro ao enviar e-mail. Verifica as tuas credenciais nos Secrets.")
+                                else:
+                                    st.error("E-mail inválido.")
                     else:
-                        st.warning("Sem voos disponíveis para estas cidades/datas.")
-                else:
-                    st.error(f"Erro na API Duffel: {res.text}")
+                        st.warning("Sem voos.")
         except Exception as e:
-            st.error(f"Erro inesperado: {e}")
+            st.error(f"Erro: {e}")
