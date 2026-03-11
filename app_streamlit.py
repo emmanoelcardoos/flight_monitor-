@@ -1,17 +1,28 @@
+import sys
+import types
+import os
+
+# --- SOLUÇÃO PARA O ERRO PKG_RESOURCES ---
+# Criamos um módulo falso para enganar a biblioteca da Duffel
+if 'pkg_resources' not in sys.modules:
+    m = types.ModuleType('pkg_resources')
+    m.get_distribution = lambda x: types.SimpleNamespace(version='0.1.0')
+    sys.modules['pkg_resources'] = m
+# ------------------------------------------
+
 import streamlit as st
 from duffel_api import Duffel
 import pandas as pd
-import os
 
-# 1. FORÇAR A VERSÃO NO NÍVEL DO SISTEMA
+# Forçar versão da API
 os.environ["DUFFEL_API_VERSION"] = "v1"
 
 st.set_page_config(page_title="Flight Monitor DGS", page_icon="✈️")
 
-# 2. Credenciais
+# Credenciais
 api_token = st.secrets.get("DUFFEL_TOKEN") or os.getenv("DUFFEL_TOKEN")
 
-# 3. Cidades
+# Cidades
 cidades = {
     "Brasil": {"São Paulo (GRU)": "GRU", "Rio (GIG)": "GIG"},
     "Europa": {"Madrid (MAD)": "MAD", "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Paris (CDG)": "CDG"},
@@ -39,11 +50,9 @@ if st.button("🔍 Procurar Voos"):
         st.error("Token não encontrado!")
     else:
         try:
-            # AQUI ESTÁ O TRUQUE: api_version="v1" (com underline) 
-            # é o que a biblioteca Python da Duffel espera internamente
             client = Duffel(access_token=api_token, api_version="v1")
             
-            with st.spinner('Buscando...'):
+            with st.spinner('Buscando voos...'):
                 slices = [{"origin": mapa_iata[origem_sel], "destination": mapa_iata[destino_sel], "departure_date": str(data_voo)}]
                 offer_request = client.offer_requests.create().slices(slices).passengers([{"type": "adult"}]).execute()
                 offers = client.offers.list(offer_request.id)
@@ -62,5 +71,4 @@ if st.button("🔍 Procurar Voos"):
                 else:
                     st.warning("Nenhum voo encontrado no modo de teste.")
         except Exception as e:
-            # Se o erro de versão persistir, vamos mostrar exatamente o que a API diz
-            st.error(f"Erro detalhado: {e}")
+            st.error(f"Erro: {e}")
