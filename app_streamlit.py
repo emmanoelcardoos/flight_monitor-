@@ -6,18 +6,25 @@ from datetime import datetime, timedelta
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
+# Função para pegar cotação ao vivo
+def get_exchange_rate():
+    try:
+        # Usando uma API gratuita de câmbio (sem necessidade de chave para uso simples)
+        res = requests.get("https://open.er-api.com/v6/latest/EUR")
+        data = res.json()
+        return data["rates"]["BRL"]
+    except:
+        return 6.15 # Valor de segurança caso a API de câmbio falhe
+
 st.markdown("""
     <style>
     .stButton>button { width: 100%; border-radius: 8px; background-color: #007bff; color: white; font-weight: bold; }
-    .main { background-color: #f8f9fa; }
     </style>
     """, unsafe_allow_html=True)
 
 # 2. Configurações
 api_token = st.secrets.get("DUFFEL_TOKEN")
-COTACAO_EUR_BRL = 6.15 
 
-# Base de sites (ajustamos o sufixo dinamicamente)
 SITES_BASE = {
     "TAP Air Portugal": {"pt": "https://www.flytap.com/pt-pt", "br": "https://www.flytap.com/pt-br"},
     "Iberia": {"pt": "https://www.iberia.com/pt/", "br": "https://www.iberia.com/br/"},
@@ -28,9 +35,26 @@ SITES_BASE = {
 }
 
 cidades = {
-    "Brasil": {"São Paulo (GRU)": "GRU", "Rio (GIG)": "GIG", "Brasília (BSB)": "BSB"},
-    "Europa": {"Madrid (MAD)": "MAD", "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR"},
-    "EUA": {"Nova York (JFK)": "JFK", "Miami (MIA)": "MIA"}
+    "Brasil - Sudeste": {
+        "São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP",
+        "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"
+    },
+    "Brasil - Sul": {
+        "Curitiba (CWB)": "CWB", "Porto Alegre (POA)": "POA", "Florianópolis (FLN)": "FLN", "Foz do Iguaçu (IGU)": "IGU"
+    },
+    "Brasil - Nordeste/Norte/Centro": {
+        "Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT",
+        "Brasília (BSB)": "BSB", "Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Goiânia (GYN)": "GYN"
+    },
+    "Portugal e Ilhas": {
+        "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Faro (FAO)": "FAO", 
+        "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL", "Terceira (TER)": "TER"
+    },
+    "Europa - Principais Hubs": {
+        "Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR", 
+        "Roma (FCO)": "FCO", "Milão (MXP)": "MXP", "Frankfurt (FRA)": "FRA", "Munique (MUC)": "MUC",
+        "Amesterdão (AMS)": "AMS", "Bruxelas (BRU)": "BRU", "Zurique (ZRH)": "ZRH", "Viena (VIE)": "VIE"
+    }
 }
 
 opcoes = []
@@ -51,9 +75,9 @@ with col_moeda:
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
 with col1:
-    origem_sel = st.selectbox("Origem: ", options=opcoes, index=0)
+    origem_sel = st.selectbox("Origem:", options=opcoes, index=18) # LIS
 with col2:
-    destino_sel = st.selectbox("Destino", options=opcoes, index=3)
+    destino_sel = st.selectbox("Destino:", options=opcoes, index=0) # GRU
 with col3:
     data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4:
@@ -68,7 +92,10 @@ if st.button("Pesquisar"):
         st.error("ERRO: Token não encontrado!")
     else:
         try:
-            with st.spinner('A localizar voos e ajustar links regionais...'):
+            with st.spinner('A localizar voos e verificar câmbio ao vivo...'):
+                # Pega a cotação do momento
+                cotacao_atual = get_exchange_rate()
+                
                 url = "https://api.duffel.com/air/offer_requests"
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
 
@@ -92,15 +119,13 @@ if st.button("Pesquisar"):
                             cia_nome = o["owner"]["name"]
                             preco_base = float(o["total_amount"])
                             
-                            # Conversão e Símbolo
-                            preco_exibicao = preco_base * COTACAO_EUR_BRL if is_br else preco_base
+                            # Conversão Dinâmica
+                            preco_exibicao = preco_base * cotacao_atual if is_br else preco_base
                             simbolo = "R$" if is_br else "€"
 
-                            # Lógica de Link Regional
                             if cia_nome in SITES_BASE:
                                 link_final = SITES_BASE[cia_nome]["br" if is_br else "pt"]
                             else:
-                                # Skyscanner Regional
                                 iata_orig, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
                                 data_str = data_ida.strftime("%y%m%d")
                                 tld = "com.br" if is_br else "pt"
@@ -109,12 +134,7 @@ if st.button("Pesquisar"):
                                     link_sky += f"{data_volta.strftime('%y%m%d')}/"
                                 link_final = link_sky
 
-                            voos_finais.append({
-                                "Companhia": cia_nome,
-                                "Preço": preco_exibicao,
-                                "Moeda": simbolo,
-                                "Link": link_final
-                            })
+                            voos_finais.append({"Companhia": cia_nome, "Preço": preco_exibicao, "Link": link_final})
 
                         st.balloons()
                         df = pd.DataFrame(voos_finais).drop_duplicates(subset=['Companhia', 'Preço'])
@@ -123,10 +143,12 @@ if st.button("Pesquisar"):
                             df,
                             column_config={
                                 "Preço": st.column_config.NumberColumn(f"Preço ({simbolo})", format=f"{simbolo} %.2f"),
-                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver no Site Oficial/BR" if is_br else "Ver no Site Oficial/PT")
+                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver Oferta Regional")
                             },
                             hide_index=True, use_container_width=True
                         )
+                        if is_br:
+                            st.caption(f"ℹ️ Cotação do momento: 1€ = R$ {cotacao_atual:.2f}")
                     else:
                         st.warning("Sem voos para estas datas.")
                 else:
