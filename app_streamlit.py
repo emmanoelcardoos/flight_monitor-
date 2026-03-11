@@ -9,14 +9,17 @@ from email.mime.multipart import MIMEMultipart
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
+# --- LER PARÂMETROS DA URL (Auto-preenchimento) ---
+query_params = st.query_params
+url_origem = query_params.get("origem")
+url_destino = query_params.get("destino")
+url_data = query_params.get("data")
+
 # --- FUNÇÕES DE APOIO ---
-# Atualiza a definição da função para receber os novos dados
 def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, destino_cod, data_ida):
     email_remetente = st.secrets.get("EMAIL_USER")
     senha_app = st.secrets.get("EMAIL_PASSWORD")
     
-    # Criamos o link dinâmico com os parâmetros
-    # Exemplo: ...app/?origem=LIS&destino=MAD&data=2024-12-25
     link_base = "https://flightmonitorec.streamlit.app"
     link_direto = f"{link_base}/?origem={origem_cod}&destino={destino_cod}&data={data_ida}"
 
@@ -35,16 +38,12 @@ def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, des
     📍 Itinerário: {itinerario}
     💰 Melhor Preço: {moeda} {preco:.2f}
     
-    Clique no link abaixo para ver os voos atualizados agora:
+    Clique no link abaixo para abrir o buscador com estes dados já preenchidos:
     🔗 {link_direto}
     
     Boa viagem,
     Equipa Flight Monitor GDS
     """
-    
-    msg.attach(MIMEText(corpo, 'plain'))
-    # ... resto do código de envio (smtp) igual ...
-    
     msg.attach(MIMEText(corpo, 'plain'))
 
     try:
@@ -87,54 +86,56 @@ for regiao, items in cidades.items():
         opcoes_origem.append(nome)
         opcoes_destino.append(nome)
 
+# --- LÓGICA DE ÍNDICE DINÂMICO (PARA O LINK FUNCIONAR) ---
+def get_index(lista, valor_iata):
+    if not valor_iata: return 0
+    for i, nome in enumerate(lista):
+        if valor_iata in nome: return i
+    return 0
+
+idx_o = get_index(opcoes_origem, url_origem)
+idx_d = get_index(opcoes_destino, url_destino)
+default_date = datetime.strptime(url_data, "%Y-%m-%d") if url_data else datetime.today()
+
 # --- ESTILOS CSS ---
 st.markdown("""
     <style>
     [data-testid="stSelectbox"] svg { display: none; }
     .stSelectbox div[data-baseweb="select"] { border-radius: 20px; }
-    /* Estilo para diminuir o espaço entre elementos */
     .block-container { padding-top: 2rem; }
     </style>
     """, unsafe_allow_html=True)
 
 # --- INTERFACE (CABEÇALHO) ---
-# Ajustei a proporção para 3:1 para a Moeda não cortar
 header_col1, header_col2 = st.columns([3, 1])
-
 with header_col1:
     st.title("🌍 Flight Monitor - Buscador GDS")
     tipo_viagem = st.radio("Configuração:", ["Só Ida/Volta", "Ida e Volta"], horizontal=True, label_visibility="collapsed")
-
 with header_col2:
-    # Título da Moeda com a mesma cor e estilo do título principal
     st.markdown("<p style='margin-bottom: -10px; font-weight: bold; color: white;'>Moeda</p>", unsafe_allow_html=True)
     moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"], key="moeda_header", label_visibility="collapsed")
 
 st.write("") 
 
-# --- TÍTULOS AUXILIARES (Agora em Branco/Brilhante como o Título) ---
+# --- TÍTULOS ---
 t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
-
-# Usamos HTML para garantir a cor branca e o alinhamento
 estilo_titulo = "margin-bottom: -30px; font-weight: bold; color: white; font-size: 14px;"
-
 t_col1.markdown(f"<p style='{estilo_titulo}'>🛫 Origem</p>", unsafe_allow_html=True)
 t_col2.markdown(f"<p style='{estilo_titulo}'>🛬 Destino</p>", unsafe_allow_html=True)
 t_col3.markdown(f"<p style='{estilo_titulo}'>📅 Ida</p>", unsafe_allow_html=True)
 if tipo_viagem == "Ida e Volta":
     t_col4.markdown(f"<p style='{estilo_titulo}'>📅 Volta</p>", unsafe_allow_html=True)
 
-st.write("") # Espaço para respirar entre título e caixa
+st.write("") 
 
-# --- BARRA DE PESQUISA (A "Régua") ---
+# --- BARRA DE PESQUISA ---
 col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
-
 with col1:
-    origem_sel = st.selectbox("Origem", options=opcoes_origem, index=0, key="origem", label_visibility="collapsed")
+    origem_sel = st.selectbox("Origem", options=opcoes_origem, index=idx_o, key="origem", label_visibility="collapsed")
 with col2:
-    destino_sel = st.selectbox("Destino", options=opcoes_destino, index=0, key="destino", label_visibility="collapsed")
+    destino_sel = st.selectbox("Destino", options=opcoes_destino, index=idx_d, key="destino", label_visibility="collapsed")
 with col3:
-    data_ida = st.date_input("Ida", min_value=datetime.today(), label_visibility="collapsed")
+    data_ida = st.date_input("Ida", value=default_date, min_value=datetime.today(), label_visibility="collapsed")
 with col4:
     if tipo_viagem == "Ida e Volta":
         data_volta = st.date_input("Volta", min_value=data_ida + timedelta(days=1), label_visibility="collapsed")
@@ -143,6 +144,7 @@ with col4:
         data_volta = None
 with col5:
     btn_pesquisar = st.button("Pesquisar", use_container_width=True, type="primary")
+
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
@@ -215,5 +217,15 @@ if "voos" in st.session_state:
     with col_btn:
         if st.button("Ativar Alerta", use_container_width=True):
             if "@" in email_user:
-                enviar_alerta_email(email_user, st.session_state.itinerario, st.session_state.voos[0]["Preço"], simb)
-                st.success("✅ Alerta ativado!")
+                # Código de destino seguro
+                dest_cod = mapa_iata.get(destino_sel, "EXPLORE") if destino_sel != "🌍 EXPLORAR QUALQUER LUGAR" else "EXPLORE"
+                enviar_alerta_email(
+                    email_user, 
+                    st.session_state.itinerario, 
+                    st.session_state.voos[0]["Preço"], 
+                    simb,
+                    mapa_iata[origem_sel],
+                    dest_cod,
+                    data_ida
+                )
+                st.success("✅ Alerta enviado com link direto!")
