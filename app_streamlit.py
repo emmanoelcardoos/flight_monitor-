@@ -61,6 +61,20 @@ for regiao, items in cidades.items():
         opcoes_origem.append(nome)
         opcoes_destino.append(nome)
 
+# --- ESTILOS PARA LIMPAR A INTERFACE (CSS) ---
+st.markdown("""
+    <style>
+    /* Esconde a seta do selectbox para parecer uma barra de pesquisa */
+    [data-testid="stSelectbox"] svg {
+        display: none;
+    }
+    /* Ajusta o campo para parecer mais com um input de texto */
+    .stSelectbox div[data-baseweb="select"] {
+        border-radius: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # --- INTERFACE ---
 st.title("🌍 Flight Monitor - Buscador GDS")
 
@@ -68,13 +82,18 @@ col_tipo, col_moeda = st.columns([3, 1])
 with col_tipo:
     tipo_viagem = st.radio("Tipo de Viagem", ["Só Ida/Volta", "Ida e Volta"], horizontal=True)
 with col_moeda:
-    moeda_pref = st.selectbox("Moeda e Região", ["Euro (€) - (Site .PT)", "Real (R$) - (Site .BR)"])
+    moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"])
 
 col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-with col1: origem_sel = st.selectbox("Origem:", options=opcoes_origem, index=0)
-with col2: destino_sel = st.selectbox("Destino:", options=opcoes_destino, index=0)
-with col3: data_ida = st.date_input("Data de Ida", min_value=datetime.today())
-with col4: data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
+with col1: 
+    # O segredo é o index=0 sendo um texto vazio ou convite
+    origem_sel = st.selectbox("Origem", options=opcoes_origem, index=0, key="origem", label_visibility="collapsed")
+with col2: 
+    destino_sel = st.selectbox("Destino", options=opcoes_destino, index=0, key="destino", label_visibility="collapsed")
+with col3: 
+    data_ida = st.date_input("📅 Ida", min_value=datetime.today())
+with col4: 
+    data_volta = st.date_input("📅 Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
 
 # --- LÓGICA DE BUSCA ---
 # --- LÓGICA DE BUSCA ---
