@@ -144,7 +144,9 @@ if st.button("Pesquisar"):
 
 # --- EXIBIÇÃO ---
 if "voos" in st.session_state:
-    st.balloons()
+    # st.balloons() # Removi os balões para ficar mais limpo
+    st.toast("Resultados atualizados!", icon="✈️") # Uma notificação pequena no canto
+    
     simb = st.session_state.voos[0]["Símbolo"]
     df = pd.DataFrame(st.session_state.voos)
     
