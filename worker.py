@@ -19,7 +19,7 @@ def enviar_alerta_mudanca(email_destino, itinerario, preco_antigo, preco_novo, m
     
     if preco_novo < preco_antigo:
         msg['Subject'] = f"📉 BAIXOU! {itinerario}"
-        status = "YUUUP! O teu voo baixou de preço! 😍"
+        status = "O teu voo baixou de preço! 😍"
     elif preco_novo > preco_antigo:
         msg['Subject'] = f"📈 SUBIU: {itinerario}"
         status = "Atenção: O preço do teu voo aumentou. 😬"
