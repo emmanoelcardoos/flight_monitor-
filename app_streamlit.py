@@ -14,51 +14,66 @@ import streamlit as st
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
 # --- ESTILO CSS PERSONALIZADO ---
-# --- ESTILO CSS BLINDADO ---
 st.markdown("""
     <style>
-    /* Forçar o fundo e cores globais */
+    /* 1. Reset Total e Fundo Neutro */
     .stApp {
-        background-color: #F0F2F5 !important;
+        background: #FFFFFF !important;
     }
     
-    /* Títulos e Textos principais sempre escuros */
-    h1, h2, h3, h4, h5, p, label, .stMarkdown {
-        color: #1E293B !important;
+    /* 2. Esconder Elementos de 'Ruído' do Streamlit */
+    header, footer, #MainMenu {visibility: hidden;}
+    
+    /* 3. Tipografia Profissional */
+    h1, h2, h3, p, span, label {
+        color: #1A1C1E !important;
+        font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif !important;
     }
 
-    /* Estilização dos inputs para serem visíveis */
-    .stSelectbox div[data-baseweb="select"], 
-    .stTextInput input, 
-    .stDateInput input,
-    .stNumberInput input {
-        background-color: white !important;
-        color: #1E293B !important;
-        border-radius: 10px !important;
-        border: 1px solid #CBD5E1 !important;
+    /* 4. Estilização dos Inputs (Estilo Clean) */
+    /* Remove o preto e coloca um cinza bem leve */
+    div[data-baseweb="select"], div[data-baseweb="input"], .stNumberInput div {
+        background-color: #F7F9FC !important;
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 8px !important;
+        color: #1A1C1E !important;
+    }
+    
+    /* Ajuste específico para o texto dentro dos inputs */
+    input {
+        color: #1A1C1E !important;
+        background-color: transparent !important;
     }
 
-    /* Botão Pesquisar - Azul Vibrante */
-    .stButton > button {
-        border-radius: 10px !important;
-        height: 3em !important;
-        background-color: #0070F3 !important;
+    /* 5. Botão de Pesquisa (Moderno e Centralizado) */
+    div.stButton > button {
+        background-color: #0066FF !important;
         color: white !important;
-        font-weight: bold !important;
+        border-radius: 8px !important;
         border: none !important;
-        width: 100% !important;
-    }
-
-    /* Cards de resultados */
-    div[data-testid="stExpander"], div.stDataFrame {
-        background-color: white !important;
-        border-radius: 15px !important;
-        padding: 10px !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
+        font-weight: 600 !important;
+        padding: 0.6rem 2rem !important;
+        transition: all 0.2s ease;
     }
     
-    /* Corrigir ícones e textos de ajuda */
-    .stTooltipIcon { color: #64748B !important; }
+    div.stButton > button:hover {
+        background-color: #0052CC !important;
+        box-shadow: 0 4px 12px rgba(0, 102, 255, 0.2);
+    }
+
+    /* 6. Tabela de Resultados */
+    div.stDataFrame {
+        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        overflow: hidden;
+    }
+
+    /* 7. Alinhamento dos Labels */
+    label p {
+        font-size: 0.9rem !important;
+        font-weight: 500 !important;
+        color: #64748B !important; /* Cinza suave para labels */
+    }
     </style>
     """, unsafe_allow_html=True)
 
