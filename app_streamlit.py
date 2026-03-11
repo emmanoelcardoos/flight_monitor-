@@ -99,7 +99,7 @@ with col3:
 with col4:
     data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
 
-# 4. Busca
+# 4. Busca e Lógica de Processamento
 if st.button("Pesquisar"):
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
         st.warning("⚠️ Selecione a Origem e o Destino.")
@@ -125,40 +125,45 @@ if st.button("Pesquisar"):
                     offers_data = offers_res.json().get("data", [])
 
                     if offers_data:
-                        voos_finais = []
-                        melhor_preco = 999999
-                        for o in offers_data:
-                            preco = float(o["total_amount"])
-                            simbolo = "R$" if is_br else "€"
-                            
-                            # Logica de link (simplificada para o exemplo)
-                            link = f"https://www.skyscanner.pt/transport/flights/{mapa_iata[origem_sel]}/{mapa_iata[destino_sel]}"
-                            
-                            voos_finais.append({"Companhia": o["owner"]["name"], "Preço": preco, "Link": link})
-                            if preco < melhor_preco: melhor_preco = preco
+                        # GUARDAR RESULTADOS NA MEMÓRIA (Session State)
+                        st.session_state.voos = []
+                        st.session_state.melhor_preco = float(offers_data[0]["total_amount"])
+                        st.session_state.simbolo = "R$" if is_br else "€"
+                        st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
 
-                        st.dataframe(pd.DataFrame(voos_finais).drop_duplicates(), use_container_width=True)
-                        
-                        # --- NOVA ÁREA DE ALERTA ---
-                        st.write("---")
-                        st.subheader("📬 Deseja receber atualizações de preço deste itinerário por e-mail?")
-                        
-                        col_mail, col_btn = st.columns([3, 1])
-                        with col_mail:
-                            email_user = st.text_input("Insere o teu e-mail:", placeholder="exemplo@email.com")
-                        with col_btn:
-                            if st.button("Ativar Alerta"):
-                                if "@" in email_user:
-                                    itinerario = f"{origem_sel} -> {destino_sel}"
-                                    simbolo = "R$" if is_br else "€"
-                                    sucesso = enviar_alerta_email(email_user, itinerario, melhor_preco, simbolo)
-                                    if sucesso:
-                                        st.success("✅ Alerta ativado! Enviámos uma confirmação para o teu e-mail.")
-                                    else:
-                                        st.error("❌ Erro ao enviar e-mail. Verifica as tuas credenciais nos Secrets.")
-                                else:
-                                    st.error("E-mail inválido.")
+                        for o in offers_data:
+                            st.session_state.voos.append({
+                                "Companhia": o["owner"]["name"],
+                                "Preço": float(o["total_amount"]),
+                                "Link": "https://www.skyscanner.pt" # Exemplo simplificado
+                            })
                     else:
                         st.warning("Sem voos.")
         except Exception as e:
             st.error(f"Erro: {e}")
+
+# EXIBIR RESULTADOS DA MEMÓRIA (Evita que desapareçam ao clicar no e-mail)
+if "voos" in st.session_state:
+    st.balloons()
+    df = pd.DataFrame(st.session_state.voos).drop_duplicates()
+    st.dataframe(df, use_container_width=True)
+    
+    st.write("---")
+    st.subheader("📬 Receber este preço por e-mail")
+    
+    email_user = st.text_input("Teu e-mail:", key="email_input")
+    if st.button("Enviar Confirmação"):
+        if "@" in email_user:
+            with st.spinner('A enviar e-mail...'):
+                sucesso = enviar_alerta_email(
+                    email_user, 
+                    st.session_state.itinerario, 
+                    st.session_state.melhor_preco, 
+                    st.session_state.simbolo
+                )
+                if sucesso:
+                    st.success(f"✅ Sucesso! E-mail enviado para {email_user}")
+                else:
+                    st.error("❌ Erro técnico. Verifica se a EMAIL_PASSWORD nos Secrets está correta.")
+        else:
+            st.error("Por favor, introduz um e-mail válido.")
