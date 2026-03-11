@@ -7,6 +7,68 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from streamlit_gsheets import GSheetsConnection
 
+import streamlit as st
+# ... teus outros imports ...
+
+# Configuração da página (deve ser a primeira coisa do Streamlit)
+st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
+
+# --- ESTILO CSS PERSONALIZADO ---
+st.markdown("""
+    <style>
+    /* Fundo da página e fontes */
+    .stApp {
+        background-color: #f8f9fa;
+        font-family: 'Inter', sans-serif;
+    }
+    
+    /* Estilização dos blocos (Cards) */
+    div[data-testid="stVerticalBlock"] > div:has(div.stDataFrame) {
+        background-color: white;
+        padding: 20px;
+        border-radius: 15px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    }
+
+    /* Botão Principal */
+    .stButton > button {
+        border-radius: 8px;
+        height: 3em;
+        background-color: #007bff;
+        color: white;
+        border: none;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    .stButton > button:hover {
+        background-color: #0056b3;
+        box-shadow: 0 4px 15px rgba(0,123,255,0.3);
+        transform: translateY(-2px);
+    }
+
+    /* Inputs e Selects */
+    .stSelectbox, .stTextInput, .stDateInput {
+        background-color: white;
+        border-radius: 10px;
+    }
+
+    /* Títulos */
+    h1 {
+        color: #1e293b;
+        font-weight: 800 !important;
+        letter-spacing: -1px;
+    }
+    
+    /* Estilo para a área de alertas */
+    .stAlert {
+        border-radius: 12px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# --- CABEÇALHO ---
+st.title("✈️ Flight Monitor GDS")
+st.markdown("<p style='color: #64748b; font-size: 1.2em;'>A tua agência digital de monitorização de voos em tempo real.</p>", unsafe_allow_html=True)
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
@@ -315,6 +377,7 @@ if "voos" in st.session_state:
                         "origem": orig_cod,
                         "destino": dest_cod,
                         "data": str(data_ida),
+                        "data_volta": str(data_volta) if data_volta else "",
                         "adultos": adultos,   # Valor capturado do number_input
                         "criancas": criancas, # Valor capturado do number_input
                         "bebes": bebes,       # Valor capturado do number_input

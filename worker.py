@@ -70,7 +70,6 @@ def monitorar():
             preco_base = float(preco_limpo)
             
             # 2. Configuração Dinâmica de Passageiros
-            # Se a coluna não existir ou estiver vazia, assume 1 adulto
             n_adultos = int(row['adultos']) if pd.notnull(row.get('adultos')) else 1
             n_criancas = int(row['criancas']) if pd.notnull(row.get('criancas')) else 0
             n_bebes = int(row['bebes']) if pd.notnull(row.get('bebes')) else 0
@@ -80,12 +79,29 @@ def monitorar():
             for _ in range(n_criancas): pax_list.append({"type": "child"})
             for _ in range(n_bebes): pax_list.append({"type": "infant"})
 
-            print(f"🔎 A verificar: {row['itinerario']} ({n_adultos} Ad, {n_criancas} Cr, {n_bebes} Be)")
+            # 3. Configuração dos Slices (Trechos) - AJUSTE IDA E VOLTA
+            slices = [{"origin": row['origem'], "destination": row['destino'], "departure_date": row['data']}]
             
-            # 3. Payload para a API
+            # Detetar se existe data de volta para adicionar o segundo trecho
+            data_volta = row.get('data_volta')
+            is_ida_e_volta = pd.notnull(data_volta) and str(data_volta).strip() != "" and str(data_volta).lower() != "none"
+            
+            if is_ida_e_volta:
+                slices.append({
+                    "origin": row['destino'], 
+                    "destination": row['origem'], 
+                    "departure_date": str(data_volta).split()[0] # Garante apenas a data YYYY-MM-DD
+                })
+                tipo_msg = "Ida e Volta"
+            else:
+                tipo_msg = "Só Ida"
+
+            print(f"🔎 A verificar ({tipo_msg}): {row['itinerario']} ({n_adultos} Ad, {n_criancas} Cr, {n_bebes} Be)")
+            
+            # 4. Payload para a API
             payload = {
                 "data": {
-                    "slices": [{"origin": row['origem'], "destination": row['destino'], "departure_date": row['data']}],
+                    "slices": slices,
                     "passengers": pax_list,
                     "requested_currencies": ["BRL" if row['moeda'] == "R$" else "EUR"]
                 }
@@ -107,6 +123,7 @@ def monitorar():
                 
                 if offers:
                     preco_atual = float(offers[0]["total_amount"])
+                    # Ajuste no link para refletir se é ida e volta ou não
                     link_site = f"https://flightmonitorec.streamlit.app/?origem={row['origem']}&destino={row['destino']}&data={row['data']}"
                     
                     enviar_alerta_mudanca(
