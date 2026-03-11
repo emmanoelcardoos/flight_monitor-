@@ -35,7 +35,7 @@ def get_exchange_rate():
         return res.json()["rates"]["BRL"]
     except: return 6.15
 
-# --- BASE DE DADOS DE CIDADES (Tua lista completa corrigida) ---
+# --- BASE DE DADOS DE CIDADES ---
 cidades = {
     "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Belo Horizonte (PLU)": "PLU", "Vitória (VIX)": "VIX"},
     "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT", "Londrina (LDB)": "LDB"},
@@ -45,10 +45,9 @@ cidades = {
     "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL"},
     "Europa": {"Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Paris Orly (ORY)": "ORY", "Londres Heathrow (LHR)": "LHR", "Londres Gatwick (LGW)": "LGW", "Roma (FCO)": "FCO", "Milão (MXP)": "MXP", "Frankfurt (FRA)": "FRA", "Munique (MUC)": "MUC", "Zurique (ZRH)": "ZRH", "Amsterdã (AMS)": "AMS", "Bruxelas (BRU)": "BRU", "Copenhaga (CPH)": "CPH", "Istambul (IST)": "IST"},
     "Estados Unidos": {"Miami (MIA)": "MIA", "Orlando (MCO)": "MCO", "Fort Lauderdale (FLL)": "FLL", "Nova York JFK (JFK)": "JFK", "Nova York Newark (EWR)": "EWR", "Atlanta (ATL)": "ATL", "Dallas (DFW)": "DFW", "Houston (IAH)": "IAH", "Chicago (ORD)": "ORD", "Los Angeles (LAX)": "LAX", "San Francisco (SFO)": "SFO", "Washington (IAD)": "IAD", "Boston (BOS)": "BOS"},
-    "África": {"Luanda (NBJ)": "NBJ", "Joanesburgo (JNB)": "JNB", "Cidade do Cabo (CPT)": "CPT", "Casablanca (CMN)": "CMN", "Addis Abeba (ADD)": "ADD"}
+    "África": {"Luanda (LAD)": "LAD", "Joanesburgo (JNB)": "JNB", "Cidade do Cabo (CPT)": "CPT", "Casablanca (CMN)": "CMN", "Addis Abeba (ADD)": "ADD"}
 }
 
-# Lista de destinos para o "Modo Explorar" (Capitais e Hubs mundiais)
 destinos_explorar_lista = ["LIS", "OPO", "MAD", "BCN", "PAR", "LHR", "FCO", "FRA", "AMS", "GRU", "GIG", "BSB", "MIA", "JFK", "LAD", "CMN"]
 
 mapa_iata = {}
@@ -61,64 +60,65 @@ for regiao, items in cidades.items():
         opcoes_origem.append(nome)
         opcoes_destino.append(nome)
 
-# --- ESTILOS PARA LIMPAR A INTERFACE (CSS) ---
+# --- ESTILOS CSS ---
 st.markdown("""
     <style>
-    /* Esconde a seta do selectbox para parecer uma barra de pesquisa */
-    [data-testid="stSelectbox"] svg {
-        display: none;
-    }
-    /* Ajusta o campo para parecer mais com um input de texto */
-    .stSelectbox div[data-baseweb="select"] {
-        border-radius: 20px;
-    }
+    [data-testid="stSelectbox"] svg { display: none; }
+    .stSelectbox div[data-baseweb="select"] { border-radius: 20px; }
+    /* Estilo para diminuir o espaço entre elementos */
+    .block-container { padding-top: 2rem; }
     </style>
     """, unsafe_allow_html=True)
 
-# --- INTERFACE ---
-st.title("🌍 Flight Monitor - Buscador GDS")
+# --- INTERFACE (CABEÇALHO) ---
+# Dividimos o topo em 2: Título e Moeda
+header_col1, header_col2 = st.columns([4, 1])
 
-col_tipo, col_moeda = st.columns([3, 1])
-with col_tipo:
-    tipo_viagem = st.radio("Tipo de Viagem", ["Só Ida/Volta", "Ida e Volta"], horizontal=True)
-with col_moeda:
-    moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"])
+with header_col1:
+    st.title("🌍 Flight Monitor - Buscador GDS")
+    tipo_viagem = st.radio("Configuração:", ["Só Ida/Volta", "Ida e Volta"], horizontal=True, label_visibility="collapsed")
 
-col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
-with col1: 
-    # O segredo é o index=0 sendo um texto vazio ou convite
+with header_col2:
+    st.write("") # Espaçamento
+    moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"], key="moeda_header")
+
+st.write("---")
+
+# --- BARRA DE PESQUISA (LINHA ÚNICA ALINHADA) ---
+col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
+
+with col1:
     origem_sel = st.selectbox("Origem", options=opcoes_origem, index=0, key="origem", label_visibility="collapsed")
-with col2: 
+with col2:
     destino_sel = st.selectbox("Destino", options=opcoes_destino, index=0, key="destino", label_visibility="collapsed")
-with col3: 
-    data_ida = st.date_input("📅 Ida", min_value=datetime.today())
-with col4: 
-    data_volta = st.date_input("📅 Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
+with col3:
+    data_ida = st.date_input("Ida", min_value=datetime.today(), label_visibility="collapsed")
+with col4:
+    if tipo_viagem == "Ida e Volta":
+        data_volta = st.date_input("Volta", min_value=data_ida + timedelta(days=1), label_visibility="collapsed")
+    else:
+        data_volta = None
+        st.button("Calendário", disabled=True, use_container_width=True) # Apenas para manter o alinhamento visual
+with col5:
+    btn_pesquisar = st.button("Pesquisar", use_container_width=True)
 
 # --- LÓGICA DE BUSCA ---
-# --- LÓGICA DE BUSCA ---
-if st.button("Pesquisar"):
+if btn_pesquisar:
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
-        st.warning("⚠️ Selecione a Origem e o Destino (ou 'Explorar').")
+        st.warning("⚠️ Selecione a Origem e o Destino.")
     else:
         try:
-            # Criar mapa inverso para traduzir IATA de volta para Nome (ex: JFK -> Nova York JFK)
             mapa_nomes = {v: k for k, v in mapa_iata.items()}
-            
-            with st.spinner('A analisar as melhores rotas para si...'):
+            with st.spinner('A pesquisar...'):
                 api_token = st.secrets.get("DUFFEL_TOKEN")
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 cotacao = get_exchange_rate()
                 is_br = "Real" in moeda_pref
                 iata_origem = mapa_iata[origem_sel]
                 
-                if destino_sel == "🌍 EXPLORAR QUALQUER LUGAR":
-                    lista_destinos = [d for d in destinos_explorar_lista if d != iata_origem]
-                else:
-                    lista_destinos = [mapa_iata[destino_sel]]
+                lista_destinos = [d for d in destinos_explorar_lista if d != iata_origem] if destino_sel == "🌍 EXPLORAR QUALQUER LUGAR" else [mapa_iata[destino_sel]]
 
                 resultados = []
-
                 for iata_dest in lista_destinos:
                     slices = [{"origin": iata_origem, "destination": iata_dest, "departure_date": str(data_ida)}]
                     if data_volta:
@@ -131,24 +131,15 @@ if st.button("Pesquisar"):
                         offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
                         if offers:
                             o = offers[0]
-                            preco_base = float(o["total_amount"])
-                            moeda_api = o["total_currency"]
-                            
-                            # Tradução do Código IATA para Nome Amigável
-                            nome_cidade_destino = mapa_nomes.get(iata_dest, iata_dest)
-                            
-                            if is_br:
-                                preco_exibicao = preco_base if moeda_api == "BRL" else preco_base * cotacao
-                                simb = "R$"
-                            else:
-                                preco_exibicao = preco_base if moeda_api == "EUR" else preco_base / cotacao
-                                simb = "€"
+                            preco_exibicao = float(o["total_amount"])
+                            if not is_br and o["total_currency"] == "BRL": preco_exibicao /= cotacao
+                            if is_br and o["total_currency"] == "EUR": preco_exibicao *= cotacao
 
                             resultados.append({
-                                "Destino": nome_cidade_destino, # Agora aparece o nome!
+                                "Destino": mapa_nomes.get(iata_dest, iata_dest),
                                 "Companhia": o["owner"]["name"],
                                 "Preço": preco_exibicao,
-                                "Símbolo": simb,
+                                "Símbolo": "R$" if is_br else "€",
                                 "Link": f"https://www.skyscanner.{'com.br' if is_br else 'pt'}/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}/?curr={'BRL' if is_br else 'EUR'}"
                             })
 
@@ -156,16 +147,14 @@ if st.button("Pesquisar"):
                     st.session_state.voos = sorted(resultados, key=lambda x: x['Preço'])
                     st.session_state.is_br = is_br
                     st.session_state.cotacao = cotacao
-                    st.session_state.itinerario = f"Saindo de {origem_sel}"
+                    st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
+                    st.toast("Resultados atualizados!", icon="✈️")
                 else:
                     st.warning("Não foram encontrados voos.")
         except Exception as e: st.error(f"Erro: {e}")
 
 # --- EXIBIÇÃO ---
 if "voos" in st.session_state:
-    # st.balloons() # Removi os balões para ficar mais limpo
-    st.toast("Resultados atualizados!", icon="✈️") # Uma notificação pequena no canto
-    
     simb = st.session_state.voos[0]["Símbolo"]
     df = pd.DataFrame(st.session_state.voos)
     
@@ -174,16 +163,16 @@ if "voos" in st.session_state:
         "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
     }, hide_index=True, use_container_width=True)
     
-    # ... resto do código de e-mail ...
-
     if st.session_state.is_br:
         st.caption(f"ℹ️ Câmbio ao vivo: 1€ = R$ {st.session_state.cotacao:.2f}")
 
     st.write("---")
     st.subheader("📬 Alerta de Preço por E-mail")
-    email_user = st.text_input("Teu e-mail:", key="email_input")
-    if st.button("Ativar Alerta"):
-        if "@" in email_user:
-            preco_alerta = st.session_state.voos[0]["Preço"]
-            enviar_alerta_email(email_user, st.session_state.itinerario, preco_alerta, simb)
-            st.success(f"✅ Alerta ativado para {email_user}")
+    col_mail, col_btn = st.columns([3, 1])
+    with col_mail:
+        email_user = st.text_input("Teu e-mail:", key="email_input", label_visibility="collapsed", placeholder="exemplo@gmail.com")
+    with col_btn:
+        if st.button("Ativar Alerta", use_container_width=True):
+            if "@" in email_user:
+                enviar_alerta_email(email_user, st.session_state.itinerario, st.session_state.voos[0]["Preço"], simb)
+                st.success("✅ Alerta ativado!")
