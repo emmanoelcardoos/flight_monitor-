@@ -10,12 +10,15 @@ from email.mime.multipart import MIMEMultipart
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
 # --- FUNÇÕES DE APOIO ---
-def enviar_alerta_email(email_destino, itinerario, preco, moeda):
+# Atualiza a definição da função para receber os novos dados
+def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, destino_cod, data_ida):
     email_remetente = st.secrets.get("EMAIL_USER")
     senha_app = st.secrets.get("EMAIL_PASSWORD")
     
-    # O link do teu site no Streamlit Cloud
-    link_meu_site = "https://flightmonitorec.streamlit.app" 
+    # Criamos o link dinâmico com os parâmetros
+    # Exemplo: ...app/?origem=LIS&destino=MAD&data=2024-12-25
+    link_base = "https://flightmonitorec.streamlit.app"
+    link_direto = f"{link_base}/?origem={origem_cod}&destino={destino_cod}&data={data_ida}"
 
     if not email_remetente or not senha_app: return False
 
@@ -24,21 +27,23 @@ def enviar_alerta_email(email_destino, itinerario, preco, moeda):
     msg['To'] = email_destino
     msg['Subject'] = f"✈️ Alerta de Preço: {itinerario}"
 
-    # Corpo do e-mail editado com o link no final
     corpo = f"""
     Olá!
     
-    Temos boas notícias! Encontramos uma atualização de preço para o seu itinerário:
+    Encontrámos o preço que procurava para o seu itinerário:
     
     📍 Itinerário: {itinerario}
     💰 Melhor Preço: {moeda} {preco:.2f}
     
-    Para consultar todos os detalhes e reservar, aceda ao nosso portal:
-    🔗 {link_meu_site}
+    Clique no link abaixo para ver os voos atualizados agora:
+    🔗 {link_direto}
     
     Boa viagem,
     Equipa Flight Monitor GDS
     """
+    
+    msg.attach(MIMEText(corpo, 'plain'))
+    # ... resto do código de envio (smtp) igual ...
     
     msg.attach(MIMEText(corpo, 'plain'))
 
