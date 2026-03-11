@@ -12,45 +12,34 @@ EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 SHEET_URL = os.getenv("SHEET_URL") # Link CSV da planilha (Publicar na Web)
 
 def enviar_alerta_mudanca(email_destino, itinerario, preco_antigo, preco_novo, moeda, link):
+    print(f"📧 A tentar enviar e-mail para {email_destino}...")
     msg = MIMEMultipart()
     msg['From'] = EMAIL_USER
     msg['To'] = email_destino
     
-    # Lógica de Assunto do E-mail
     if preco_novo < preco_antigo:
         msg['Subject'] = f"📉 BAIXOU! {itinerario}"
-        status_msg = "🌟 Boas notícias! O preço do seu voo baixou!"
+        status = "YUUUP! O teu voo baixou de preço! 😍"
     elif preco_novo > preco_antigo:
         msg['Subject'] = f"📈 SUBIU: {itinerario}"
-        status_msg = "Atenção: O preço do seu voo aumentou ligeiramente."
+        status = "Atenção: O preço do teu voo aumentou. 😬"
     else:
-        return # Se o preço for igual, o robô não incomoda o utilizador
+        print("ℹ️ Preço igual, e-mail ignorado.")
+        return
 
-    corpo = f"""
-    Olá! Este é o seu assistente automático do Flight Monitor GDS.
-    
-    {status_msg}
-    
-    📍 Itinerário: {itinerario}
-    💰 Preço anterior: {moeda} {preco_antigo:.2f}
-    🔥 Preço ATUAL: {moeda} {preco_novo:.2f}
-    
-    Para ver os detalhes ou reservar, clique aqui:
-    🔗 {link}
-    
-    Boa viagem!
-    """
+    corpo = f"Olá! {status}\n📍 Itinerário: {itinerario}\nAntes: {moeda} {preco_antigo}\nAgora: {moeda} {preco_novo}\n🔗 {link}"
     msg.attach(MIMEText(corpo, 'plain'))
     
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
+        print("🔑 A fazer login no Gmail...")
         server.login(EMAIL_USER, EMAIL_PASSWORD)
         server.send_message(msg)
         server.quit()
-        print(f"✅ E-mail enviado para {email_destino}")
+        print(f"✅ E-mail enviado com sucesso para {email_destino}!")
     except Exception as e:
-        print(f"❌ Erro ao enviar e-mail: {e}")
+        print(f"❌ ERRO CRÍTICO NO ENVIO: {e}")
 
 def monitorar():
     print("🤖 Robô acordou! A ler alertas da planilha...")
