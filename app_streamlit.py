@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from streamlit_gsheets import GSheetsConnection
 
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
@@ -54,6 +55,21 @@ def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, des
         server.quit()
         return True
     except: return False
+
+def guardar_alerta_planilha(dados):
+    try:
+        conn = st.connection("gsheets", type=GSheetsConnection)
+        # Lê os dados existentes
+        existing_data = conn.read(worksheet="Página1")
+        # Adiciona a nova linha
+        new_row = pd.DataFrame([dados])
+        updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+        # Grava de volta
+        conn.update(worksheet="Página1", data=updated_df)
+        return True
+    except Exception as e:
+        st.error(f"Erro ao salvar na planilha: {e}")
+        return False
 
 def get_exchange_rate():
     try:
@@ -217,15 +233,35 @@ if "voos" in st.session_state:
     with col_btn:
         if st.button("Ativar Alerta", use_container_width=True):
             if "@" in email_user:
-                # Código de destino seguro
-                dest_cod = mapa_iata.get(destino_sel, "EXPLORE") if destino_sel != "🌍 EXPLORAR QUALQUER LUGAR" else "EXPLORE"
-                enviar_alerta_email(
-                    email_user, 
-                    st.session_state.itinerario, 
-                    st.session_state.voos[0]["Preço"], 
-                    simb,
-                    mapa_iata[origem_sel],
-                    dest_cod,
-                    data_ida
-                )
-                st.success("✅ Alerta enviado com link direto!")
+                with st.spinner("A processar alerta..."):
+                    # 1. Enviar e-mail de confirmação imediata
+                    dest_cod = mapa_iata.get(destino_sel, "EXPLORE")
+                    orig_cod = mapa_iata[origem_sel]
+                    
+                    enviado = enviar_alerta_email(
+                        email_user, 
+                        st.session_state.itinerario, 
+                        st.session_state.voos[0]["Preço"], 
+                        simb,
+                        orig_cod,
+                        dest_cod,
+                        data_ida
+                    )
+                    
+                    # 2. Guardar na Planilha para o Robô consultar depois
+                    dados_alerta = {
+                        "email": email_user,
+                        "itinerario": st.session_state.itinerario,
+                        "origem": orig_cod,
+                        "destino": dest_cod,
+                        "data": str(data_ida),
+                        "preco_inicial": st.session_state.voos[0]["Preço"],
+                        "moeda": simb
+                    }
+                    guardado = guardar_alerta_planilha(dados_alerta)
+                    
+                    if enviado and guardado:
+                        st.success("✅ Alerta ativo! Receberá atualizações diárias se o preço mudar.")
+            else:
+                st.error("Por favor, insere um e-mail válido.")
+     
