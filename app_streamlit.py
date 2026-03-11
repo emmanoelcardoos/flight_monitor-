@@ -94,3 +94,5 @@ if st.button("🔍 Procurar Voos Agora"):
 
         except Exception as e:
             st.error(f"Erro inesperado: {e}")
+
+            #oi
