@@ -60,31 +60,34 @@ def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # 1. Tentar ler o que já existe. Se estiver vazio, criamos um DataFrame com as colunas certas
-        colunas_certas = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
+        # O segredo está no ttl=0 para leitura fresca
+        # Adicionamos as novas colunas à lista oficial
+        colunas_certas = [
+            "email", "itinerario", "origem", "destino", "data", 
+            "adultos", "criancas", "bebes", "preco_inicial", "moeda"
+        ]
+        
         try:
             df_atual = conn.read(worksheet="Página1", ttl=0)
-            # Se a folha existir mas estiver vazia, garantimos que tem as colunas
-            if df_atual.empty:
+            if not df_atual.empty:
+                # Reindexamos para garantir que o DF lido tenha as colunas certas
+                df_atual = df_atual.reindex(columns=colunas_certas)
+            else:
                 df_atual = pd.DataFrame(columns=colunas_certas)
         except:
             df_atual = pd.DataFrame(columns=colunas_certas)
 
-        # 2. Criar o novo dado como uma nova linha
+        # Criar a nova linha com os dados dos passageiros
         novo_dado = pd.DataFrame([dados])
-        
-        # 3. Forçar a ordem das colunas para bater com o cabeçalho
         novo_dado = novo_dado.reindex(columns=colunas_certas)
 
-        # 4. A MAGIA: Concatenar (juntar) o novo dado ao final do antigo
-        # ignore_index=True garante que ele cria uma linha nova (0, 1, 2, 3...)
+        # Juntar tudo
         df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
 
-        # 5. Remover linhas que estejam totalmente vazias (limpeza extra)
-        df_final = df_final.dropna(how='all')
-
-        # 6. Atualizar a planilha inteira com a nova lista aumentada
+        # Atualizar a planilha
         conn.update(worksheet="Página1", data=df_final)
+        st.cache_data.clear() 
+        
         return True
     except Exception as e:
         st.error(f"Erro ao guardar alerta: {e}")
@@ -262,11 +265,16 @@ if btn_pesquisar:
         except Exception as e: st.error(f"Erro: {e}")
 
 # --- EXIBIÇÃO ---
+# --- EXIBIÇÃO ---
 if "voos" in st.session_state:
     simb = st.session_state.voos[0]["Símbolo"]
     df = pd.DataFrame(st.session_state.voos)
     
-    st.dataframe(df, column_config={
+    # Removemos as colunas internas (Adultos, Criancas, Bebes) da visualização da tabela para ficar clean
+    # mas elas continuam no session_state para usarmos no alerta.
+    colunas_visiveis = ["Destino", "Companhia", "Preço", "Link"]
+    
+    st.dataframe(df[colunas_visiveis], column_config={
         "Preço": st.column_config.NumberColumn(f"Preço ({simb})", format=f"{simb} %.2f"),
         "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
     }, hide_index=True, use_container_width=True)
@@ -276,6 +284,8 @@ if "voos" in st.session_state:
 
     st.write("---")
     st.subheader("📬 Alerta de Preço por E-mail")
+    st.info(f"O alerta será configurado para: **{adultos} Adulto(s), {criancas} Criança(s) e {bebes} Bebé(s)**")
+    
     col_mail, col_btn = st.columns([3, 1])
     with col_mail:
         email_user = st.text_input("Teu e-mail:", key="email_input", label_visibility="collapsed", placeholder="exemplo@gmail.com")
@@ -284,8 +294,9 @@ if "voos" in st.session_state:
             if "@" in email_user:
                 with st.spinner("A processar alerta..."):
                     # 1. Enviar e-mail de confirmação imediata
-                    dest_cod = mapa_iata.get(destino_sel, "EXPLORE")
+                    # Usamos os códigos IATA que já calculamos na lógica de busca
                     orig_cod = mapa_iata[origem_sel]
+                    dest_cod = mapa_iata[destino_sel] if destino_sel != "🌍 EXPLORAR QUALQUER LUGAR" else "EXPLORE"
                     
                     enviado = enviar_alerta_email(
                         email_user, 
@@ -297,20 +308,24 @@ if "voos" in st.session_state:
                         data_ida
                     )
                     
-                    # 2. Guardar na Planilha para o Robô consultar depois
+                    # 2. Guardar na Planilha incluindo a nova contagem de passageiros
                     dados_alerta = {
                         "email": email_user,
-                        "itinerario": st.session_state.itinerario,  # Certifica-te que aqui não tem acento na chave
+                        "itinerario": st.session_state.itinerario,
                         "origem": orig_cod,
                         "destino": dest_cod,
                         "data": str(data_ida),
+                        "adultos": adultos,   # Valor capturado do number_input
+                        "criancas": criancas, # Valor capturado do number_input
+                        "bebes": bebes,       # Valor capturado do number_input
                         "preco_inicial": st.session_state.voos[0]["Preço"],
                         "moeda": simb
                     }
                     guardado = guardar_alerta_planilha(dados_alerta)
                     
                     if enviado and guardado:
-                        st.success("✅ Alerta ativo! Receberá atualizações diárias se o preço mudar.")
+                        total_pax = adultos + criancas + bebes
+                        st.success(f"✅ Alerta ativo para {total_pax} passageiro(s)! Receberá atualizações diárias.")
             else:
                 st.error("Por favor, insere um e-mail válido.")
      
