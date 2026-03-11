@@ -3,6 +3,8 @@ from duffel_api import Duffel
 import pandas as pd
 import os
 
+os.environ["DUFFEL_API_VERSION"] = "v1"
+
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor DGS", page_icon="✈️", layout="centered")
 
@@ -46,7 +48,7 @@ if st.button("🔍 Procurar Voos Agora"):
     else:
         try:
             # ADICIONADO: version="v1" para corrigir o erro de Unsupported Version
-            client = Duffel(access_token=api_token, version="v1")
+            client = Duffel(access_token=api_token)
             
             with st.spinner('Consultando ofertas atualizadas...'):
                 slices = [{"origin": mapa_iata[origem_sel], "destination": mapa_iata[destino_sel], "departure_date": str(data_voo)}]
