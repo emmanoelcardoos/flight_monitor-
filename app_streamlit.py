@@ -13,13 +13,35 @@ st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="
 def enviar_alerta_email(email_destino, itinerario, preco, moeda):
     email_remetente = st.secrets.get("EMAIL_USER")
     senha_app = st.secrets.get("EMAIL_PASSWORD")
+    
+    # O link do teu site no Streamlit Cloud
+    link_meu_site = "https://flightmonitorec.streamlit.app" 
+
     if not email_remetente or not senha_app: return False
+
     msg = MIMEMultipart()
     msg['From'] = email_remetente
     msg['To'] = email_destino
     msg['Subject'] = f"✈️ Alerta de Preço: {itinerario}"
-    corpo = f"Olá!\n\nEncontrámos uma oferta para {itinerario} por {moeda} {preco:.2f}.\nVerifica no teu site!"
+
+    # Corpo do e-mail editado com o link no final
+    corpo = f"""
+    Olá!
+    
+    Temos boas notícias! Encontramos uma atualização de preço para o seu itinerário:
+    
+    📍 Itinerário: {itinerario}
+    💰 Melhor Preço: {moeda} {preco:.2f}
+    
+    Para consultar todos os detalhes e reservar, aceda ao nosso portal:
+    🔗 {link_meu_site}
+    
+    Boa viagem,
+    Equipa Flight Monitor GDS
+    """
+    
     msg.attach(MIMEText(corpo, 'plain'))
+
     try:
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
