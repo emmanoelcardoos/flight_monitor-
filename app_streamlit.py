@@ -63,7 +63,7 @@ def guardar_alerta_planilha(dados):
         # 1. Tentar ler o que já existe. Se estiver vazio, criamos um DataFrame com as colunas certas
         colunas_certas = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
         try:
-            df_atual = conn.read(worksheet="Página1")
+            df_atual = conn.read(worksheet="Página1", ttl=0)
             # Se a folha existir mas estiver vazia, garantimos que tem as colunas
             if df_atual.empty:
                 df_atual = pd.DataFrame(columns=colunas_certas)
