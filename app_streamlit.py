@@ -51,7 +51,7 @@ if st.button("🔍 Procurar Voos Agora"):
                 # REMOVEMOS A LINHA DA VERSÃO: A Duffel usará a padrão da tua conta
                 headers = {
                     "Authorization": f"Bearer {api_token}",
-                    "Duffel-Version": "v1",
+                    "Duffel-Version": "v2",
                     "Content-Type": "application/json"
                 }
                 
