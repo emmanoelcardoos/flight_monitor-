@@ -77,11 +77,15 @@ with col3: data_ida = st.date_input("Data de Ida", min_value=datetime.today())
 with col4: data_volta = st.date_input("Data de Volta", min_value=data_ida + timedelta(days=1)) if tipo_viagem == "Ida e Volta" else None
 
 # --- LÓGICA DE BUSCA ---
+# --- LÓGICA DE BUSCA ---
 if st.button("Pesquisar"):
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
         st.warning("⚠️ Selecione a Origem e o Destino (ou 'Explorar').")
     else:
         try:
+            # Criar mapa inverso para traduzir IATA de volta para Nome (ex: JFK -> Nova York JFK)
+            mapa_nomes = {v: k for k, v in mapa_iata.items()}
+            
             with st.spinner('A analisar as melhores rotas para si...'):
                 api_token = st.secrets.get("DUFFEL_TOKEN")
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
@@ -89,7 +93,6 @@ if st.button("Pesquisar"):
                 is_br = "Real" in moeda_pref
                 iata_origem = mapa_iata[origem_sel]
                 
-                # Definir lista de destinos
                 if destino_sel == "🌍 EXPLORAR QUALQUER LUGAR":
                     lista_destinos = [d for d in destinos_explorar_lista if d != iata_origem]
                 else:
@@ -112,6 +115,9 @@ if st.button("Pesquisar"):
                             preco_base = float(o["total_amount"])
                             moeda_api = o["total_currency"]
                             
+                            # Tradução do Código IATA para Nome Amigável
+                            nome_cidade_destino = mapa_nomes.get(iata_dest, iata_dest)
+                            
                             if is_br:
                                 preco_exibicao = preco_base if moeda_api == "BRL" else preco_base * cotacao
                                 simb = "R$"
@@ -120,7 +126,7 @@ if st.button("Pesquisar"):
                                 simb = "€"
 
                             resultados.append({
-                                "Destino": iata_dest,
+                                "Destino": nome_cidade_destino, # Agora aparece o nome!
                                 "Companhia": o["owner"]["name"],
                                 "Preço": preco_exibicao,
                                 "Símbolo": simb,
@@ -144,8 +150,10 @@ if "voos" in st.session_state:
     
     st.dataframe(df, column_config={
         "Preço": st.column_config.NumberColumn(f"Preço ({simb})", format=f"{simb} %.2f"),
-        "Link": st.column_config.LinkColumn("Reservar")
+        "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
     }, hide_index=True, use_container_width=True)
+    
+    # ... resto do código de e-mail ...
 
     if st.session_state.is_br:
         st.caption(f"ℹ️ Câmbio ao vivo: 1€ = R$ {st.session_state.cotacao:.2f}")
