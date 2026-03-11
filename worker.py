@@ -56,6 +56,8 @@ def monitorar():
     print("🤖 Robô acordou! A ler alertas da planilha...")
     # Lê a planilha publicada como CSV
     try:
+        # Adicionamos o parâmetro decimal=',' para ajudar o pandas, 
+        # mas faremos a limpeza manual por segurança abaixo.
         df = pd.read_csv(SHEET_URL)
     except Exception as e:
         print(f"❌ Erro ao ler planilha: {e}")
@@ -68,30 +70,55 @@ def monitorar():
     }
 
     for _, row in df.iterrows():
-        print(f"🔎 A verificar: {row['itinerario']}...")
-        
-        # Payload para a Duffel
-        payload = {
-            "data": {
-                "slices": [{"origin": row['origem'], "destination": row['destino'], "departure_date": row['data']}],
-                "passengers": [{"type": "adult"}],
-                "requested_currencies": ["BRL" if row['moeda'] == "R$" else "EUR"]
-            }
-        }
-        
-        res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
-        
-        if res.status_code == 201:
-            offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
+        try:
+            # --- CORREÇÃO DO PREÇO ---
+            # Remove espaços, troca vírgula por ponto e converte para número
+            preco_limpo = str(row['preco_inicial']).replace(' ', '').replace(',', '.')
+            preco_base = float(preco_limpo)
             
-            if offers:
-                preco_atual = float(offers[0]["total_amount"])
-                link_site = f"https://flightmonitorec.streamlit.app/?origem={row['origem']}&destino={row['destino']}&data={row['data']}"
+            print(f"🔎 A verificar: {row['itinerario']} (Preço base: {preco_base})")
+            
+            # Payload para a Duffel
+            payload = {
+                "data": {
+                    "slices": [{"origin": row['origem'], "destination": row['destino'], "departure_date": row['data']}],
+                    "passengers": [{"type": "adult"}],
+                    "requested_currencies": ["BRL" if row['moeda'] == "R$" else "EUR"]
+                }
+            }
+            
+            res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
+            
+            if res.status_code == 201:
+                offers_data = requests.get(
+                    f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", 
+                    headers=headers
+                ).json().get("data", [])
                 
-                # Dispara o e-mail se houver diferença de preço
-                enviar_alerta_mudanca(row['email'], row['itinerario'], float(row['preco_inicial']), preco_atual, row['moeda'], link_site)
+                if offers_data:
+                    preco_atual = float(offers_data[0]["total_amount"])
+                    link_site = f"https://flightmonitorec.streamlit.app/?origem={row['origem']}&destino={row['destino']}&data={row['data']}"
+                    
+                    # Dispara o e-mail comparando com o preco_base já convertido
+                    enviar_alerta_mudanca(
+                        row['email'], 
+                        row['itinerario'], 
+                        preco_base, 
+                        preco_atual, 
+                        row['moeda'], 
+                        link_site
+                    )
+                else:
+                    print(f"⚠️ Sem voos encontrados para {row['itinerario']}")
             else:
-                print(f"⚠️ Sem voos encontrados para {row['itinerario']}")
+                print(f"❌ Erro na API Duffel para {row['itinerario']}: {res.status_code}")
+
+        except ValueError as ve:
+            print(f"⚠️ Erro de formato no preço da linha: {row['itinerario']}. Valor recebido: {row['preco_inicial']}")
+            continue # Pula para a próxima linha da planilha
+        except Exception as e:
+            print(f"⚠️ Erro inesperado ao processar linha: {e}")
+            continue
 
 if __name__ == "__main__":
     monitorar()
