@@ -163,8 +163,9 @@ if tipo_viagem == "Ida e Volta":
 
 st.write("") 
 
-# --- BARRA DE PESQUISA ---
-col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
+# --- BARRA DE PESQUISA ATUALIZADA ---
+# Ajustei as proporções das colunas para caberem os passageiros sem amontoar
+col1, col2, col3, col4 = st.columns([2, 2, 1.2, 1.2])
 with col1:
     origem_sel = st.selectbox("Origem", options=opcoes_origem, index=idx_o, key="origem", label_visibility="collapsed")
 with col2:
@@ -175,10 +176,22 @@ with col4:
     if tipo_viagem == "Ida e Volta":
         data_volta = st.date_input("Volta", min_value=data_ida + timedelta(days=1), label_visibility="collapsed")
     else:
-        st.button("---", disabled=True, use_container_width=True, key="spacer_btn")
+        st.button("Somente Ida", disabled=True, use_container_width=True)
         data_volta = None
-with col5:
-    btn_pesquisar = st.button("Pesquisar", use_container_width=True, type="primary")
+
+# --- NOVA LINHA PARA PASSAGEIROS E BOTÃO ---
+st.markdown("##### 👥 Passageiros")
+c_ad, c_cr, c_be, c_btn = st.columns([1, 1, 1, 2])
+with c_ad:
+    adultos = st.number_input("Adultos", min_value=1, max_value=9, value=1, step=1)
+with c_cr:
+    criancas = st.number_input("Crianças", min_value=0, max_value=9, value=0, step=1)
+with c_be:
+    # Máximo de bebês é limitado ao número de adultos (regra de segurança da aviação)
+    bebes = st.number_input("Bebés", min_value=0, max_value=adultos, value=0, step=1)
+with c_btn:
+    st.markdown("<div style='margin-top: 25px;'></div>", unsafe_allow_html=True) # Alinhamento visual
+    btn_pesquisar = st.button("Pesquisar Voos", use_container_width=True, type="primary")
 
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
@@ -187,13 +200,19 @@ if btn_pesquisar:
     else:
         try:
             mapa_nomes = {v: k for k, v in mapa_iata.items()}
-            with st.spinner('A pesquisar...'):
+            with st.spinner('A pesquisar para o grupo...'):
                 api_token = st.secrets.get("DUFFEL_TOKEN")
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 cotacao = get_exchange_rate()
                 is_br = "Real" in moeda_pref
                 iata_origem = mapa_iata[origem_sel]
                 
+                # Montar a lista de passageiros para a API
+                lista_passageiros = []
+                for _ in range(adultos): lista_passageiros.append({"type": "adult"})
+                for _ in range(criancas): lista_passageiros.append({"type": "child"})
+                for _ in range(bebes): lista_passageiros.append({"type": "infant"})
+
                 lista_destinos = [d for d in destinos_explorar_lista if d != iata_origem] if destino_sel == "🌍 EXPLORAR QUALQUER LUGAR" else [mapa_iata[destino_sel]]
 
                 resultados = []
@@ -202,7 +221,15 @@ if btn_pesquisar:
                     if data_volta:
                         slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
                     
-                    payload = {"data": {"slices": slices, "passengers": [{"type": "adult"}], "requested_currencies": ["BRL" if is_br else "EUR"]}}
+                    # PAYLOAD ATUALIZADO COM LISTA DE PASSAGEIROS
+                    payload = {
+                        "data": {
+                            "slices": slices, 
+                            "passengers": lista_passageiros, 
+                            "requested_currencies": ["BRL" if is_br else "EUR"]
+                        }
+                    }
+                    
                     res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
                     
                     if res.status_code == 201:
@@ -218,7 +245,10 @@ if btn_pesquisar:
                                 "Companhia": o["owner"]["name"],
                                 "Preço": preco_exibicao,
                                 "Símbolo": "R$" if is_br else "€",
-                                "Link": f"https://www.skyscanner.{'com.br' if is_br else 'pt'}/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}/?curr={'BRL' if is_br else 'EUR'}"
+                                "Link": f"https://www.skyscanner.{'com.br' if is_br else 'pt'}/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}/?curr={'BRL' if is_br else 'EUR'}",
+                                "Adultos": adultos,   # Guardamos para o alerta depois
+                                "Criancas": criancas,
+                                "Bebes": bebes
                             })
 
                 if resultados:
@@ -226,9 +256,9 @@ if btn_pesquisar:
                     st.session_state.is_br = is_br
                     st.session_state.cotacao = cotacao
                     st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
-                    st.toast("Resultados atualizados!", icon="✈️")
+                    st.toast(f"Resultados para {adultos+criancas+bebes} passageiro(s)!", icon="✈️")
                 else:
-                    st.warning("Não foram encontrados voos.")
+                    st.warning("Não foram encontrados voos para este grupo nesta data.")
         except Exception as e: st.error(f"Erro: {e}")
 
 # --- EXIBIÇÃO ---
