@@ -60,21 +60,28 @@ def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         
-        # 1. Lê os dados atuais
-        df_atual = conn.read(worksheet="Página1")
-        
-        # 2. Cria o novo dado garantindo a ordem das colunas
+        # 1. Lê os dados, mas se der erro ou estiver vazio, cria um DataFrame novo
+        try:
+            df_atual = conn.read(worksheet="Página1")
+        except:
+            df_atual = pd.DataFrame()
+
+        # 2. Criar o novo dado (em minúsculas e sem acentos)
         novo_dado = pd.DataFrame([dados])
         
-        # 3. Força o novo dado a ter as colunas na ordem certa da planilha
-        # Isso evita que ele crie colunas novas se houver erro de nome
-        colunas_planilha = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
-        novo_dado = novo_dado.reindex(columns=colunas_planilha)
-        
-        # 4. Junta e limpa linhas vazias
-        df_final = pd.concat([df_atual, novo_dado], ignore_index=True).dropna(subset=["email"])
-        
-        # 5. Atualiza a planilha
+        # 3. Forçar a ordem das colunas para bater com o Robô
+        colunas_certas = ["email", "itinerario", "origem", "destino", "data", "preco_inicial", "moeda"]
+        novo_dado = novo_dado.reindex(columns=colunas_certas)
+
+        # 4. Juntar ao que já existia (se existir)
+        if not df_atual.empty:
+            # Garante que o df_atual também usa os nomes sem acento antes de juntar
+            df_atual.columns = colunas_certas[:len(df_atual.columns)] 
+            df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
+        else:
+            df_final = novo_dado
+
+        # 5. O TRUQUE: Re-escrever TUDO incluindo o cabeçalho novo
         conn.update(worksheet="Página1", data=df_final)
         return True
     except Exception as e:
