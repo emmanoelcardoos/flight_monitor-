@@ -53,7 +53,7 @@ if st.button("🔍 Procurar Melhores Preços"):
                 url = "https://api.duffel.com/air/offer_requests"
                 headers = {
                     "Authorization": f"Bearer {api_token}",
-                    "Duffel-Version": "v1",
+                    "Duffel-Version": "2021-12-01",
                     "Content-Type": "application/json"
                 }
                 
