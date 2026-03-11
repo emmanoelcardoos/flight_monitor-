@@ -71,27 +71,35 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # --- INTERFACE (CABEÇALHO) ---
-header_col1, header_col2 = st.columns([4, 1])
+# Ajustei a proporção para 3:1 para a Moeda não cortar
+header_col1, header_col2 = st.columns([3, 1])
 
 with header_col1:
     st.title("🌍 Flight Monitor - Buscador GDS")
     tipo_viagem = st.radio("Configuração:", ["Só Ida/Volta", "Ida e Volta"], horizontal=True, label_visibility="collapsed")
 
 with header_col2:
-    # Mantemos a moeda no canto superior direito
-    moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"], key="moeda_header")
+    # Título da Moeda com a mesma cor e estilo do título principal
+    st.markdown("<p style='margin-bottom: -10px; font-weight: bold; color: white;'>Moeda</p>", unsafe_allow_html=True)
+    moeda_pref = st.selectbox("Moeda", ["Euro (€) - (.PT)", "Real (R$) - (.BR)"], key="moeda_header", label_visibility="collapsed")
 
-st.write("") # Pequeno espaço
+st.write("") 
 
-# --- TÍTULOS AUXILIARES (Para o utilizador saber o que é cada campo) ---
+# --- TÍTULOS AUXILIARES (Agora em Branco/Brilhante como o Título) ---
 t_col1, t_col2, t_col3, t_col4, t_col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
-t_col1.caption("🛫 Origem")
-t_col2.caption("🛬 Destino")
-t_col3.caption("📅 Ida")
-if tipo_viagem == "Ida e Volta":
-    t_col4.caption("📅 Volta")
 
-# --- BARRA DE PESQUISA (A "Régua" Alinhada) ---
+# Usamos HTML para garantir a cor branca e o alinhamento
+estilo_titulo = "margin-bottom: -30px; font-weight: bold; color: white; font-size: 14px;"
+
+t_col1.markdown(f"<p style='{estilo_titulo}'>🛫 Origem</p>", unsafe_allow_html=True)
+t_col2.markdown(f"<p style='{estilo_titulo}'>🛬 Destino</p>", unsafe_allow_html=True)
+t_col3.markdown(f"<p style='{estilo_titulo}'>📅 Ida</p>", unsafe_allow_html=True)
+if tipo_viagem == "Ida e Volta":
+    t_col4.markdown(f"<p style='{estilo_titulo}'>📅 Volta</p>", unsafe_allow_html=True)
+
+st.write("") # Espaço para respirar entre título e caixa
+
+# --- BARRA DE PESQUISA (A "Régua") ---
 col1, col2, col3, col4, col5 = st.columns([2.5, 2.5, 1.5, 1.5, 1])
 
 with col1:
@@ -104,12 +112,10 @@ with col4:
     if tipo_viagem == "Ida e Volta":
         data_volta = st.date_input("Volta", min_value=data_ida + timedelta(days=1), label_visibility="collapsed")
     else:
-        # Espaço vazio desativado apenas para manter o alinhamento da régua
         st.button("---", disabled=True, use_container_width=True, key="spacer_btn")
         data_volta = None
 with col5:
     btn_pesquisar = st.button("Pesquisar", use_container_width=True, type="primary")
-
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
     if origem_sel == "Cidade ou Aeroporto..." or destino_sel == "Cidade ou Aeroporto...":
