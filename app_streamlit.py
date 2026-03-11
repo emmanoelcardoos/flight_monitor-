@@ -4,26 +4,23 @@ import pandas as pd
 import os
 
 # 1. Configuração da Página
-st.set_page_config(page_title="Flight Monitor DGS", page_icon="✈️", layout="centered")
+st.set_page_config(page_title="Flight Monitor DGS", page_icon="✈️")
 
-# Estilização Profissional
 st.markdown("""
     <style>
-    .stButton>button {width: 100%; background-color: #007bff; color: white; font-weight: bold; border-radius: 8px; height: 3em;}
-    .main {background-color: #f5f7f9;}
+    .stButton>button {width: 100%; background-color: #007bff; color: white; font-weight: bold; border-radius: 8px;}
     </style>
     """, unsafe_allow_html=True)
 
-# 2. Token da Duffel (Pegando dos Secrets do Streamlit)
+# 2. Token (Lendo dos Secrets do Streamlit)
 api_token = st.secrets.get("DUFFEL_TOKEN")
 
-# 3. Cidades e Aeroportos
+# 3. Cidades
 cidades = {
-    "Brasil": {"São Paulo (GRU)": "GRU", "Rio (GIG)": "GIG", "Brasília (BSB)": "BSB"},
-    "Europa": {"Madrid (MAD)": "MAD", "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR"},
-    "EUA": {"Nova York (JFK)": "JFK", "Miami (MIA)": "MIA", "Orlando (MCO)": "MCO"}
+    "Brasil": {"São Paulo (GRU)": "GRU", "Rio (GIG)": "GIG"},
+    "Europa": {"Madrid (MAD)": "MAD", "Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Paris (CDG)": "CDG"},
+    "EUA": {"Nova York (JFK)": "JFK", "Miami (MIA)": "MIA"}
 }
-
 opcoes = []
 mapa_iata = {}
 for regiao, items in cidades.items():
@@ -31,84 +28,68 @@ for regiao, items in cidades.items():
         opcoes.append(nome)
         mapa_iata[nome] = iata
 
-# 4. Interface do Utilizador
+# 4. Interface
 st.title("🌍 Flight Monitor - Buscador DGS")
-st.write("Pesquisa direta via API Duffel (Versão Estável 2026).")
 
 col1, col2 = st.columns(2)
 with col1:
     origem_sel = st.selectbox("Saindo de:", options=opcoes, index=0)
 with col2:
-    destino_sel = st.selectbox("Indo para:", options=opcoes, index=3) # Madrid
+    destino_sel = st.selectbox("Indo para:", options=opcoes, index=2)
+    
+data_voo = st.date_input("Data da viagem:")
 
-data_voo = st.date_input("Data da viagem:", help="Selecione uma data futura")
-
-# 5. Lógica de Busca Direta (Sem bibliotecas instáveis)
-if st.button("🔍 Procurar Melhores Preços"):
+# 5. Busca Direta
+if st.button("🔍 Procurar Voos Agora"):
     if not api_token:
-        st.error("Erro: Token DUFFEL_TOKEN não configurado no Streamlit Cloud!")
+        st.error("Erro: DUFFEL_TOKEN não configurado!")
     else:
         try:
-            with st.spinner('A consultar os sistemas de reserva...'):
+            with st.spinner('Acedendo aos sistemas...'):
                 url = "https://api.duffel.com/air/offer_requests"
+                
+                # REMOVEMOS A LINHA DA VERSÃO: A Duffel usará a padrão da tua conta
                 headers = {
                     "Authorization": f"Bearer {api_token}",
-                    "Duffel-Version": "2021-12-01",
                     "Content-Type": "application/json"
                 }
                 
                 payload = {
                     "data": {
-                        "slices": [{
-                            "origin": mapa_iata[origem_sel],
-                            "destination": mapa_iata[destino_sel],
-                            "departure_date": str(data_voo)
-                        }],
+                        "slices": [{"origin": mapa_iata[origem_sel], "destination": mapa_iata[destino_sel], "departure_date": str(data_voo)}],
                         "passengers": [{"type": "adult"}],
                         "cabin_class": "economy"
                     }
                 }
 
-                # Criar requisição
-                response = requests.post(url, headers=headers, json=payload)
+                # Criar pedido
+                res = requests.post(url, headers=headers, json=payload)
                 
-                if response.status_code == 201:
-                    request_id = response.json()["data"]["id"]
+                if res.status_code == 201:
+                    req_id = res.json()["data"]["id"]
                     
-                    # Buscar as ofertas geradas
-                    offers_url = f"https://api.duffel.com/air/offers?offer_request_id={request_id}&sort=total_amount"
+                    # Buscar ofertas
+                    offers_url = f"https://api.duffel.com/air/offers?offer_request_id={req_id}&sort=total_amount"
                     offers_res = requests.get(offers_url, headers=headers)
-                    offers_data = offers_res.json()["data"]
+                    offers_data = offers_res.json().get("data", [])
 
-                    voos_list = []
-                    for offer in offers_data:
-                        voos_list.append({
-                            "Companhia": offer["owner"]["name"],
-                            "Preço": float(offer["total_amount"]),
-                            "Moeda": offer["total_currency"],
-                            "Link": f"https://www.google.com/travel/flights?q=Flights%20to%20{mapa_iata[destino_sel]}%20from%20{mapa_iata[origem_sel]}%20on%20{data_voo}"
-                        })
-
-                    if voos_list:
-                        df = pd.DataFrame(voos_list)
+                    if offers_data:
+                        voos = []
+                        for o in offers_data:
+                            voos.append({
+                                "Companhia": o["owner"]["name"],
+                                "Preço": float(o["total_amount"]),
+                                "Moeda": o["total_currency"],
+                                "Link": f"https://www.google.com/travel/flights?q=Flights%20to%20{mapa_iata[destino_sel]}%20from%20{mapa_iata[origem_sel]}%20on%20{data_voo}"
+                            })
+                        
                         st.balloons()
-                        st.success(f"Encontramos {len(df)} voos!")
-                        st.dataframe(
-                            df,
-                            column_config={
-                                "Preço": st.column_config.NumberColumn(format="%.2f"),
-                                "Link": st.column_config.LinkColumn("Reservar 🔗", display_text="Ver no Google Flights")
-                            },
-                            hide_index=True,
-                            use_container_width=True
-                        )
+                        st.table(pd.DataFrame(voos).sort_values("Preço"))
                     else:
-                        st.warning("Nenhum voo disponível para esta rota no modo de teste.")
+                        st.warning("Nenhum voo encontrado no modo de teste para esta rota.")
                 else:
-                    st.error(f"Erro na API Duffel: {response.text}")
+                    # Se der erro de versão de novo, o erro aparecerá aqui detalhado
+                    st.error(f"Erro na API: {res.text}")
 
         except Exception as e:
-            st.error(f"Ocorreu um erro inesperado: {e}")
-
-st.markdown("---")
-st.caption("Desenvolvido por Emmanoel.")
+            st.error(f"Erro inesperado: {e}")
