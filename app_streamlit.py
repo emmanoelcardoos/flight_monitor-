@@ -7,75 +7,79 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuração da Página (DEVE ser a primeira linha de comando Streamlit)
-st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="centered")
+# 1. Configuração da Página (WIDE para a imagem de fundo ocupar tudo)
+st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# --- ESTILO CSS PREMIUM (GOOGLE FLIGHTS STYLE) ---
-# --- ESTILO CSS SUAVIZADO ---
+# --- ESTILO CSS PORTAL DE VIAGENS (GOTOGATE STYLE) ---
 st.markdown("""
     <style>
-    /* 1. Fundo Off-White (Menos cansaço visual) */
+    /* 1. Imagem de Fundo Hero */
     .stApp {
-        background-color: #F8FAFC !important;
+        background: linear-gradient(rgba(0,0,0,0.3), rgba(0,0,0,0.3)), 
+                    url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80');
+        background-size: cover;
+        background-position: center;
+        background-attachment: fixed;
     }
     
-    /* 2. Card Branco com Sombra Sutil */
+    /* 2. Centralizar Card de Busca */
     [data-testid="stVerticalBlock"] > div:has(div.stButton) {
-        background-color: #ffffff !important;
+        background-color: rgba(255, 255, 255, 0.98) !important;
         padding: 40px !important;
-        border-radius: 20px !important;
-        box-shadow: 0 10px 25px rgba(148, 163, 184, 0.1) !important;
-        border: 1px solid #E2E8F0 !important;
+        border-radius: 12px !important;
+        box-shadow: 0 12px 40px rgba(0,0,0,0.4) !important;
+        max-width: 1050px !important;
+        margin: auto !important;
+        margin-top: 50px !important;
     }
 
-    /* 3. Inputs: Fim das barras pretas */
-    /* Vamos forçar um cinza muito claro e bordas suaves */
+    /* 3. Inputs Suaves (Fim do Preto) */
     div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, .stNumberInput div, div[data-testid="stPopover"] > button {
-        background-color: #F1F5F9 !important; /* Cinza claro suave */
+        background-color: #F8FAFC !important;
         border: 1px solid #E2E8F0 !important;
-        border-radius: 12px !important;
+        border-radius: 6px !important;
         color: #334155 !important;
-        height: 45px !important;
     }
 
-    /* Cor do texto dentro dos campos */
+    /* Forçar cores de texto */
     input, select, span, p, label {
-        color: #334155 !important; /* Azul escuro acinzentado (não é preto puro) */
+        color: #334155 !important;
+        font-weight: 500 !important;
     }
 
-    /* Botão Passageiros (Popover) mais elegante */
-    div[data-testid="stPopover"] > button {
-        width: 100% !important;
-        border: 1px solid #E2E8F0 !important;
-    }
-
-    /* 4. Botão Pesquisar (Azul Skyscanner) */
+    /* 4. Botão "Gotogate Blue" */
     .stButton > button {
-        background-color: #0062E3 !important;
+        background-color: #40D1FB !important; 
         color: white !important;
-        border-radius: 12px !important;
-        height: 50px !important;
-        font-weight: 600 !important;
-        font-size: 16px !important;
+        border-radius: 6px !important;
+        height: 52px !important;
+        font-weight: 700 !important;
+        font-size: 18px !important;
         border: none !important;
-        transition: all 0.2s ease-in-out !important;
+        text-transform: uppercase;
+        width: 100% !important;
+        transition: all 0.3s ease !important;
     }
     .stButton > button:hover {
-        background-color: #004db3 !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 4px 12px rgba(0, 98, 227, 0.2) !important;
+        background-color: #00B4EB !important;
+        transform: scale(1.02);
     }
 
-    /* 5. Títulos Suaves */
-    h1 {
-        color: #0F172A !important;
-        font-weight: 700 !important;
+    /* 5. Títulos Hero */
+    .hero-container {
+        text-align: center;
+        padding: 40px 0;
+        color: white;
     }
-    
-    /* Remover linhas e menus inúteis */
-    #MainMenu, header, footer {visibility: hidden;}
-    .stDeployButton {display:none;}
+
+    /* Esconder Menu e Footer */
+    header, footer, #MainMenu {visibility: hidden;}
     </style>
+
+    <div class="hero-container">
+        <h1 style="font-size: 4rem; font-weight: 900; text-shadow: 2px 2px 8px rgba(0,0,0,0.5);">Reserve Voos Baratos</h1>
+        <p style="font-size: 1.5rem; text-shadow: 1px 1px 4px rgba(0,0,0,0.5);">Sua agência digital de monitorização de voos</p>
+    </div>
     """, unsafe_allow_html=True)
 
 # --- FUNÇÕES DE APOIO ---
@@ -88,16 +92,11 @@ def get_exchange_rate():
 def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
-        colunas_certas = [
-            "email", "itinerario", "origem", "destino", "data", "data_volta",
-            "adultos", "criancas", "bebes", "preco_inicial", "moeda"
-        ]
+        colunas_certas = ["email", "itinerario", "origem", "destino", "data", "data_volta", "adultos", "criancas", "bebes", "preco_inicial", "moeda"]
         try:
             df_atual = conn.read(worksheet="Página1", ttl=0)
             df_atual = df_atual.reindex(columns=colunas_certas) if not df_atual.empty else pd.DataFrame(columns=colunas_certas)
-        except:
-            df_atual = pd.DataFrame(columns=colunas_certas)
-
+        except: df_atual = pd.DataFrame(columns=colunas_certas)
         novo_dado = pd.DataFrame([dados]).reindex(columns=colunas_certas)
         df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
         conn.update(worksheet="Página1", data=df_final)
@@ -107,73 +106,141 @@ def guardar_alerta_planilha(dados):
         st.error(f"Erro na planilha: {e}")
         return False
 
-def enviar_alerta_email(email_destino, itinerario, preco, moeda, origem_cod, destino_cod, data_ida):
-    email_remetente = st.secrets.get("EMAIL_USER")
-    senha_app = st.secrets.get("EMAIL_PASSWORD")
-    if not email_remetente or not senha_app: return False
-
-    msg = MIMEMultipart()
-    msg['From'] = email_remetente
-    msg['To'] = email_destino
-    msg['Subject'] = f"✈️ Alerta de Preço: {itinerario}"
-
-    corpo = f"📍 Itinerário: {itinerario}\n💰 Melhor Preço: {moeda} {preco:.2f}\n\nAbra o site para reservar!"
-    msg.attach(MIMEText(corpo, 'plain'))
-
-    try:
-        server = smtplib.SMTP('smtp.gmail.com', 587)
-        server.starttls()
-        server.login(email_remetente, senha_app)
-        server.send_message(msg)
-        server.quit()
-        return True
-    except: return False
-
-# --- DADOS E PARÂMETROS ---
+# --- DADOS ---
 cidades = {
-    "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO"},
-    "Brasil": {"São Paulo (GRU)": "GRU", "Rio de Janeiro (GIG)": "GIG", "Brasília (BSB)": "BSB"},
-    "Europa/EUA": {"Madrid (MAD)": "MAD", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR", "Miami (MIA)": "MIA", "Nova York (JFK)": "JFK"}
+
+    "Brasil - Sudeste": {
+        "São Paulo (GRU)": "GRU",
+        "São Paulo (CGH)": "CGH",
+        "Campinas (VCP)": "VCP",
+        "Rio de Janeiro (GIG)": "GIG",
+        "Rio de Janeiro (SDU)": "SDU",
+        "Belo Horizonte (CNF)": "CNF",
+        "Belo Horizonte (PLU)": "PLU",
+        "Vitória (VIX)": "VIX"
+    },
+
+    "Brasil - Sul": {
+        "Curitiba (CWB)": "CWB",
+        "Florianópolis (FLN)": "FLN",
+        "Porto Alegre (POA)": "POA",
+        "Foz do Iguaçu (IGU)": "IGU",
+        "Navegantes (NVT)": "NVT",
+        "Londrina (LDB)": "LDB"
+    },
+
+    "Brasil - Centro-Oeste": {
+        "Brasília (BSB)": "BSB",
+        "Goiânia (GYN)": "GYN",
+        "Cuiabá (CGB)": "CGB",
+        "Campo Grande (CGR)": "CGR"
+    },
+
+    "Brasil - Nordeste": {
+        "Salvador (SSA)": "SSA",
+        "Recife (REC)": "REC",
+        "Fortaleza (FOR)": "FOR",
+        "Natal (NAT)": "NAT",
+        "Maceió (MCZ)": "MCZ",
+        "João Pessoa (JPA)": "JPA",
+        "Aracaju (AJU)": "AJU",
+        "Porto Seguro (BPS)": "BPS",
+        "Ilhéus (IOS)": "IOS"
+    },
+
+    "Brasil - Norte": {
+        "Manaus (MAO)": "MAO",
+        "Belém (BEL)": "BEL",
+        "Porto Velho (PVH)": "PVH",
+        "Rio Branco (RBR)": "RBR",
+        "Macapá (MCP)": "MCP",
+        "Boa Vista (BVB)": "BVB",
+        "Palmas (PMW)": "PMW",
+        "Marabá (MAB)": "MAB",
+        "Parauapebas / Carajás (CKS)": "CKS",
+        "Araguaína (AUX)": "AUX"
+
+    },
+
+    "Portugal": {
+        "Lisboa (LIS)": "LIS",
+        "Porto (OPO)": "OPO",
+        "Funchal (FNC)": "FNC",
+        "Ponta Delgada (PDL)": "PDL"
+    },
+
+    "Europa": {
+        "Madrid (MAD)": "MAD",
+        "Barcelona (BCN)": "BCN",
+        "Paris (CDG)": "CDG",
+        "Paris Orly (ORY)": "ORY",
+        "Londres Heathrow (LHR)": "LHR",
+        "Londres Gatwick (LGW)": "LGW",
+        "Roma (FCO)": "FCO",
+        "Milão (MXP)": "MXP",
+        "Frankfurt (FRA)": "FRA",
+        "Munique (MUC)": "MUC",
+        "Zurique (ZRH)": "ZRH",
+        "Amsterdã (AMS)": "AMS",
+        "Bruxelas (BRU)": "BRU",
+        "Copenhaga (CPH)": "CPH",
+        "Istambul (IST)": "IST",
+        "Lisboa (LIS)": "LIS",
+        "Porto (OPO)": "OPO"
+    },
+
+    "Estados Unidos": {
+        "Miami (MIA)": "MIA",
+        "Orlando (MCO)": "MCO",
+        "Fort Lauderdale (FLL)": "FLL",
+        "Nova York JFK (JFK)": "JFK",
+        "Nova York Newark (EWR)": "EWR",
+        "Atlanta (ATL)": "ATL",
+        "Dallas (DFW)": "DFW",
+        "Houston (IAH)": "IAH",
+        "Chicago (ORD)": "ORD",
+        "Los Angeles (LAX)": "LAX",
+        "San Francisco (SFO)": "SFO",
+        "Washington (IAD)": "IAD",
+        "Boston (BOS)": "BOS"
+    },
+
+    "África": {
+        "Luanda (LAD)": "LAD",
+        "Joanesburgo (JNB)": "JNB",
+        "Cidade do Cabo (CPT)": "CPT",
+        "Casablanca (CMN)": "CMN",
+        "Addis Abeba (ADD)": "ADD"
+    }
 }
 mapa_iata = {}
-opcoes_origem = ["Cidade ou Aeroporto..."]
-opcoes_destino = ["Cidade ou Aeroporto...", "🌍 EXPLORAR QUALQUER LUGAR"]
-
+opcoes_origem = ["De..."]
+opcoes_destino = ["Para...", "🌍 EXPLORAR QUALQUER LUGAR"]
 for regiao, items in cidades.items():
     for nome, iata in items.items():
         mapa_iata[nome] = iata
         opcoes_origem.append(nome)
         opcoes_destino.append(nome)
 
-query_params = st.query_params
-idx_o = 0 # Lógica de index simplificada para o exemplo
-idx_d = 0
-default_date = datetime.today()
-
-# --- INTERFACE ---
-st.markdown("<h1 style='text-align: center; color: #111827;'>✈️ Flight Monitor</h1>", unsafe_allow_html=True)
-st.markdown("<p style='text-align: center; color: #6b7280;'>Sua agência digital de monitorização de voos</p>", unsafe_allow_html=True)
-
-# 1. Configuração de Voo
-col_tipo, col_moeda = st.columns([2, 1])
-with col_tipo:
-    tipo_viagem = st.radio("Tipo:", ["Só Ida", "Ida e Volta"], horizontal=True, label_visibility="collapsed")
-with col_moeda:
-    moeda_pref = st.selectbox("Moeda", ["Euro (€)", "Real (R$)"], label_visibility="collapsed")
-
-# 2. Card de Busca
+# --- INTERFACE DE BUSCA ---
 with st.container():
-    c1, c2 = st.columns(2)
-    with c1: origem_sel = st.selectbox("🛫 Origem", opcoes_origem, index=idx_o)
-    with c2: destino_sel = st.selectbox("🛬 Destino", opcoes_destino, index=idx_d)
+    # Tipo de Viagem
+    tipo_viagem = st.radio("Tipo", ["Ida e volta", "Somente ida"], horizontal=True, label_visibility="collapsed")
+    
+    # Origem e Destino
+    c1, c_swap, c2 = st.columns([10, 1, 10])
+    with c1: origem_sel = st.selectbox("De", opcoes_origem)
+    with c_swap: st.markdown("<div style='text-align: center; margin-top: 35px;'>⇄</div>", unsafe_allow_html=True)
+    with c2: destino_sel = st.selectbox("Para", opcoes_destino)
 
-    c3, c4, c5 = st.columns([1, 1, 1])
-    with c3: data_ida = st.date_input("📅 Ida", value=default_date)
-    with c4: 
-        if tipo_viagem == "Ida e Volta":
-            data_volta = st.date_input("📅 Volta", value=default_date + timedelta(days=7))
+    # Datas, Passageiros e Moeda
+    c3, c4, c5, c6 = st.columns([4, 4, 4, 4])
+    with c3: data_ida = st.date_input("Ida", value=datetime.today())
+    with c4:
+        if tipo_viagem == "Ida e volta":
+            data_volta = st.date_input("Volta", value=datetime.today() + timedelta(days=7))
         else:
-            st.text_input("📅 Volta", value="---", disabled=True)
+            st.text_input("Volta", value="---", disabled=True)
             data_volta = None
     with c5:
         pax_pop = st.popover("👤 Passageiros")
@@ -181,113 +248,62 @@ with st.container():
             adultos = st.number_input("Adultos", 1, 9, 1)
             criancas = st.number_input("Crianças", 0, 9, 0)
             bebes = st.number_input("Bebés", 0, adultos, 0)
+    with c6:
+        moeda_pref = st.selectbox("Moeda", ["Euro (€)", "Real (R$)"])
 
-    btn_pesquisar = st.button("Pesquisar Voos")
+    btn_pesquisar = st.button("Buscar voos")
 
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
-    if "Cidade" in origem_sel or "Cidade" in destino_sel:
+    if "..." in origem_sel or "..." in destino_sel:
         st.warning("Selecione origem e destino.")
     else:
         try:
-            with st.spinner('Buscando as melhores ofertas...'):
+            with st.spinner('Procurando as melhores tarifas...'):
                 api_token = st.secrets["DUFFEL_TOKEN"]
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 is_br = "Real" in moeda_pref
                 cotacao = get_exchange_rate()
-                
-                # Montar passageiros
                 pax_list = [{"type": "adult"}] * adultos + [{"type": "child"}] * criancas + [{"type": "infant"}] * bebes
-                
-                iata_origem = mapa_iata[origem_sel]
-                iata_dest = mapa_iata[destino_sel]
-                
+                iata_origem, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
                 slices = [{"origin": iata_origem, "destination": iata_dest, "departure_date": str(data_ida)}]
-                if data_volta:
-                    slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
+                if data_volta: slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
 
                 payload = {"data": {"slices": slices, "passengers": pax_list, "requested_currencies": ["BRL" if is_br else "EUR"]}}
                 res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
-                
                 if res.status_code == 201:
                     offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
                     if offers:
                         o = offers[0]
                         st.session_state.voos = [{
-                            "Destino": destino_sel,
-                            "Companhia": o["owner"]["name"],
-                            "Preço": float(o["total_amount"]),
-                            "Símbolo": "R$" if is_br else "€",
-                            "Link": "https://www.skyscanner.pt" # Exemplo
+                            "Destino": destino_sel, "Companhia": o["owner"]["name"],
+                            "Preço": float(o["total_amount"]), "Símbolo": "R$" if is_br else "€",
+                            "Link": f"https://www.skyscanner.pt/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}"
                         }]
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
         except Exception as e: st.error(f"Erro: {e}")
 
-# --- EXIBIÇÃO E ALERTA ---
-# --- EXIBIÇÃO DE RESULTADOS (CORRIGIDA COM LINKS CLICÁVEIS) ---
+# --- EXIBIÇÃO DE RESULTADOS ---
 if "voos" in st.session_state:
-    st.markdown("---")
-    st.markdown("<h3 style='color: #334155;'>✈️ Melhores Ofertas Encontradas</h3>", unsafe_allow_html=True)
-    
-    # Criamos o DataFrame
-    df = pd.DataFrame(st.session_state.voos)
-    
-    # Definimos as colunas que queremos mostrar
-    # Nota: A coluna "Link" deve conter a URL completa (ex: https://...)
-    colunas_visiveis = ["Destino", "Companhia", "Preço", "Link"]
-    simb = st.session_state.voos[0]["Símbolo"]
-
-    # Exibição com configuração de coluna de Link
-    st.dataframe(
-        df[colunas_visiveis], 
-        column_config={
-            "Preço": st.column_config.NumberColumn(f"Preço ({simb})", format=f"{simb} %.2f"),
-            "Link": st.column_config.LinkColumn(
-                "Reservar", 
-                display_text="Ver Oferta ✈️",  # O que aparece no botão
-                help="Clique para abrir no Skyscanner"
-            )
-        },
-        hide_index=True, 
-        use_container_width=True
-    )
-    
-    # Informação de Câmbio (apenas se for Real)
-    if st.session_state.get("is_br"):
-        st.caption(f"ℹ️ Câmbio utilizado: 1€ = R$ {st.session_state.cotacao:.2f}")
-
-    # --- SEÇÃO DE ALERTA ---
-    st.markdown("<div style='margin-top: 40px;'></div>", unsafe_allow_html=True)
+    st.markdown("<br>", unsafe_allow_html=True)
     with st.container():
-        st.markdown("<h3 style='color: #334155;'>📬 Ativar Alerta de Preço</h3>", unsafe_allow_html=True)
-        st.markdown(f"<p style='color: #64748B;'>Monitorizar para: {adultos} Adulto(s), {criancas} Criança(s) e {bebes} Bebé(s)</p>", unsafe_allow_html=True)
+        st.markdown("<div style='background-color: white; padding: 25px; border-radius: 12px; border: 1px solid #E2E8F0;'>", unsafe_allow_html=True)
+        st.subheader("✈️ Ofertas Encontradas")
+        df = pd.DataFrame(st.session_state.voos)
+        simb = st.session_state.voos[0]["Símbolo"]
+        st.dataframe(df[["Companhia", "Preço", "Link"]], column_config={
+            "Preço": st.column_config.NumberColumn(f"Preço ({simb})", format=f"{simb} %.2f"),
+            "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
+        }, use_container_width=True, hide_index=True)
         
+        st.markdown("---")
+        st.subheader("📬 Ativar Alerta")
+        st.info(f"Vigilância ativa para {adultos} Adulto(s) e {criancas+bebes} Criança(s)")
         c_mail, c_btn = st.columns([3, 1])
-        with c_mail:
-            email_user = st.text_input("Teu e-mail:", key="email_input", label_visibility="collapsed", placeholder="exemplo@gmail.com")
+        with c_mail: email_user = st.text_input("Teu e-mail:", placeholder="exemplo@gmail.com")
         with c_btn:
-            if st.button("Ativar Alerta", use_container_width=True):
+            if st.button("Ativar"):
                 if "@" in email_user:
-                    with st.spinner("A processar..."):
-                        # Captura códigos IATA para o alerta
-                        orig_cod = mapa_iata.get(origem_sel)
-                        dest_cod = mapa_iata.get(destino_sel) if destino_sel != "🌍 EXPLORAR QUALQUER LUGAR" else "EXPLORE"
-                        
-                        dados_alerta = {
-                            "email": email_user,
-                            "itinerario": st.session_state.itinerario,
-                            "origem": orig_cod,
-                            "destino": dest_cod,
-                            "data": str(data_ida),
-                            "data_volta": str(data_volta) if data_volta else "",
-                            "adultos": adultos,
-                            "criancas": criancas,
-                            "bebes": bebes,
-                            "preco_inicial": st.session_state.voos[0]["Preço"],
-                            "moeda": simb
-                        }
-                        
-                        if guardar_alerta_planilha(dados_alerta):
-                            st.success(f"✅ Alerta configurado para {email_user}!")
-                else:
-                    st.error("Insere um e-mail válido.")
+                    dados = {"email": email_user, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": simb}
+                    if guardar_alerta_planilha(dados): st.success("Alerta ativo!")
+        st.markdown("</div>", unsafe_allow_html=True)
