@@ -11,7 +11,6 @@ import stripe
 
 
 # Tenta pegar de st.secrets, se não existir, fica None
-stripe.api_key = "sk_test_51TAF6HRQs5fSMOCGXMJ96KLjg18ZgfuH6p56midOvzsSAmjSim6imLcPujzex5LdZvxQ5GFYU31l72gjVu5Hpp8g00iF1KLOnq"
 
 if chave_stripe:
     stripe.api_key = chave_stripe
@@ -25,11 +24,18 @@ else:
 stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
+    # Forçamos a leitura da chave aqui dentro
     import stripe
-    # Colocando a chave diretamente aqui para ignorar o erro de "Secrets"
-    stripe.api_key = "sk_test_51TAF6HRQs5fSMOCGXMJ96KLjg18ZgfuH6p56midOvzsSAmjSim6imLcPujzex5LdZvxQ5GFYU31l72gjVu5Hpp8g00iF1KLOnq"
+    chave_stripe = st.secrets.get("STRIPE_SECRET_KEY")
+    
+    if not chave:
+        st.error("❌ Erro crítico: A chave STRIPE_SECRET_KEY não foi encontrada nos Secrets do Streamlit.")
+        return None
+        
+    stripe.api_key = chave
 
     try:
+        # Criamos a sessão de checkout
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
@@ -39,18 +45,23 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
                         'name': f"Reserva de Voo - {itinerario}",
                         'description': f"Passageiro: {nome_pax}",
                     },
-                    'unit_amount': int(float(valor_eur) * 100),
+                    'unit_amount': int(float(valor_eur) * 100), # Converte para centavos
                 },
                 'quantity': 1,
             }],
             mode='payment',
-            success_url="https://flightmonitorec.streamlit.app/?pagamento=sucesso",
-            cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
+            # URLs de retorno (Ajuste para a URL real do seu site no Streamlit Cloud)
+            success_url="https://sua-agencia.streamlit.app/?pagamento=sucesso",
+            cancel_url="https://sua-agencia.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
+            metadata={
+                "pax_name": nome_pax,
+                "pax_email": email_pax
+            }
         )
         return session.url
     except Exception as e:
-        st.error(f"Erro Stripe: {e}")
+        st.error(f"Erro ao conectar com Stripe: {e}")
         return None
 
 def enviar_email(destinatario, assunto, corpo, anexo_url=None):
