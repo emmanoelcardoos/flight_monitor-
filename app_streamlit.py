@@ -329,18 +329,21 @@ elif st.session_state.pagina == "reserva":
         st.form_submit_button("1. Salvar Dados do Passageiro")
 
     # --- FORA DO FORMULÁRIO ---
+    # 1. Preparação dos valores
     valor_exato_duffel = v.get("valor_bruto_duffel")
+    
     if metodo == "Cartão de Crédito":
         st.markdown("### 💳 Pagamento")
-
+        
+        # Só tentamos criar se houver valor
         if valor_exato_duffel:
             res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
-
+            
             if "data" in res_intencao:
                 client_token = res_intencao["data"]["client_token"]
                 pit_id = res_intencao["data"]["id"]
 
-                # O componente HTML PRECISA estar aqui dentro para usar o client_token
+                # COMPONENTE REAL (CAIXA BRANCA + BOTÃO AZUL)
                 duffel_card_html = f"""
                 <script src="https://js.duffel.com/v2/duffel.js"></script>
                 <div id="card-element" style="margin-bottom: 15px;"></div>
@@ -348,80 +351,51 @@ elif st.session_state.pagina == "reserva":
                     AUTORIZAR PAGAMENTO
                 </button>
                 <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
-
                 <script>
                     const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
                     const cardElement = duffel.elements.create('card');
                     cardElement.mount('#card-element');
-
-                    const btn = document.getElementById('pay-button');
-                    btn.addEventListener('click', async () => {{
-                        btn.disabled = true;
-                        btn.innerText = "Processando...";
-                        document.getElementById('status-msg').innerText = "Consultando o banco...";
-
-                        const result = await duffel.confirmPaymentIntent("{client_token}", {{
-                            payment_method: {{ card: cardElement }}
-                        }});
-
-                        if (result.error) {{
+                    document.getElementById('pay-button').onclick = async () => {{
+                        const btn = document.getElementById('pay-button');
+                        btn.disabled = true; btn.innerText = "Consultando Banco...";
+                        const res = await duffel.confirmPaymentIntent("{client_token}", {{ payment_method: {{ card: cardElement }} }});
+                        if (res.error) {{
                             document.getElementById('status-msg').style.color = "red";
-                            document.getElementById('status-msg').innerText = result.error.message;
-                            btn.disabled = false;
-                            btn.innerText = "AUTORIZAR PAGAMENTO";
+                            document.getElementById('status-msg').innerText = res.error.message;
+                            btn.disabled = false; btn.innerText = "TENTAR NOVAMENTE";
                         }} else {{
                             document.getElementById('status-msg').style.color = "green";
-                            document.getElementById('status-msg').innerText = "Sucesso! Pagamento aprovado.";
-                            btn.innerText = "PAGO";
+                            document.getElementById('status-msg').innerText = "Sucesso! Pagamento Autorizado.";
+                            btn.innerText = "PAGAMENTO CONCLUÍDO";
                         }}
-                    }});
+                    }};
                 </script>
-                <style>
-                    #card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}
-                </style>
+                <style>#card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}</style>
                 """
-                components.html(duffel_card_html, height=250)
-
-                # Parcelamento (Apenas visual) - mantido dentro do sucesso do pagamento
-                if v['Moeda'] == "R$":
-                    parcelas_list = [f"{i}x sem juros" for i in range(1, 11)] + ["11x com acréscimo", "12x com acréscimo"]
-                    st.selectbox("Parcelamento", parcelas_list, key="card_install_v17")
-            
+                import streamlit.components.v1 as components
+                components.html(duffel_card_html, height=220)
             else:
-                # Caso a Duffel responda mas não traga 'data' (Erro de Token ou API)
-                st.error("Erro ao gerar token de pagamento na Duffel.")
-        
-        else:
-            # Caso não haja valor_exato_duffel
-            st.error("Não foi possível iniciar o gateway de pagamento: valor ausente.")
+                # Diagnóstico de Erro Real da Duffel
+                erro_api = res_intencao.get("errors", [{}])[0].get("message", "Erro desconhecido")
+                st.error(f"Duffel recuou: {erro_api}. Verifique se o valor {valor_exato_duffel} está correto para a moeda EUR.")
 
     # --- BOTÃO FINAL DE EMISSÃO ---
     st.divider()
     if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
         if not nome or not email:
-            st.error("Por favor, preencha os dados do passageiro acima e clique em 'Salvar'.")
-        elif bloqueio_emissao:
-            st.error("Verifique os dados do passaporte.")
+            st.error("Preencha Nome e E-mail e clique em 'Salvar Dados do Passageiro'.")
         else:
             try:
-                # 1. Organiza os detalhes para os e-mails
+                # Preparar Itinerário para o E-mail
                 detalhes_voo = ""
                 for seg in v['Segmentos']:
-                    detalhes_voo += f"""
-                    ✈️ {seg['companhia']} ({seg['voo']})
-                    De: {seg['de']} às {seg['saida']}
-                    Para: {seg['para']} às {seg['chegada']}
-                    Aeronave: {seg.get('aeronave', 'N/A')}
-                    Bagagem: {seg.get('bagagem', 'Consulte as regras')}
-                    -------------------------
-                    """
+                    detalhes_voo += f"✈️ {seg['companhia']} | De: {seg['de']} ➔ Para: {seg['para']} | Voo: {seg['voo']}\n"
 
-                # 2. Envia o primeiro e-mail (Compra em Processamento)
-                # Vamos assumir que você criou a função 'enviar_email'
+                # E-MAIL 1: PROCESSAMENTO
                 enviar_email(
-                    destinatario=email, 
-                    assunto="Seu pedido está em processamento! ✈️", 
-                    corpo=f"Olá {nome},\n\nRecebemos seu pagamento. Receberás os dados das da sua reserva assim que o pagamento for concluido!.\n\nDetalhes do Itinerário:\n{detalhes_voo}"
+                    destinatario=email,
+                    assunto="Sua compra está em processamento! ✈️",
+                    corpo=f"Olá {nome},\n\nRecebemos sua autorização de pagamento. Já pode consultar sua reserva! \n Detalhes da Reserva na Cia Aérea:\n{detalhes_voo}\n."
                 )
 
                 with st.spinner('Iniciando processo de emissão...'):
@@ -475,8 +449,9 @@ elif st.session_state.pagina == "reserva":
                         res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
                         if res_ordem.status_code == 201:
-                            dados_reserva = res_ordem.json()['data']
-                            pnr = dados_reserva['booking_reference']
+                            res_data = res_ordem.json()['data']
+                            pnr = res_data['booking_reference']
+                            pdf_url = res_data.get('documents', [{}])[0].get('url', "")
                         
                          # Tenta pegar o link do PDF se a Duffel já o gerou
                             link_pdf = ""
