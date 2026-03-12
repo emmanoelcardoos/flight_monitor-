@@ -294,7 +294,7 @@ elif st.session_state.pagina == "reserva":
                         # Converte para os códigos da API
                         gen_code = "m" if genero_pax == "Masculino" else "f"
                         tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
-                        moeda_pg = "BRL" if "Real" in v.get("Moeda_Busca", "Real") else "EUR"
+                        moeda_pg = "EUR"
 
                         payload = {
                             "data": {
