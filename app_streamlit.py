@@ -314,7 +314,7 @@ elif st.session_state.pagina == "reserva":
                                 "payments": [{
                                     "type": "balance",
                                     "currency": moeda_pg,
-                                    "amount": str(round(v['Preço'], 2))
+                                    "amount": f"{valor_original_eur:.2f}"
                                 }]
                             }
                         }
