@@ -259,12 +259,23 @@ elif st.session_state.pagina == "reserva":
                 bloqueio_emissao = True
 
         if metodo == "Cartão de Crédito":
-            st.markdown("### 💳 Cartão")
-            st.text_input("Número do Cartão", key="card_num_v16")
+            st.markdown("### 💳 Dados do Cartão")
+            
+            # Nome e Número
+            nome_titular = st.text_input("Nome Impresso no Cartão", key="card_name_v17")
+            numero_cartao = st.text_input("Número do Cartão", key="card_num_v17", placeholder="0000 0000 0000 0000")
+            
+            # Validade e CVV na mesma linha
+            col_card_v1, col_card_v2 = st.columns(2)
+            validade_cartao = col_card_v1.text_input("Validade (MM/AA)", key="card_exp_v17", placeholder="MM/AA")
+            cvv_cartao = col_card_v2.text_input("CVV", type="password", key="card_cvv_v17", placeholder="123")
+            
+            # CPF do Titular (Necessário para processamento no Brasil/Stripe)
+            cpf_titular = st.text_input("CPF do Titular do Cartão", key="card_cpf_v17")
+
             if v['Moeda'] == "R$":
-                st.selectbox("Parcelas", [f"{i}x sem juros" for i in range(1, 11)] + ["12x com acréscimo"], key="pax_parcelas_v16")
-        else:
-            st.info("💠 Pagamento via PIX: Utilize o suporte abaixo.")
+                parcelas_list = [f"{i}x sem juros" for i in range(1, 11)] + ["11x com acréscimo", "12x com acréscimo"]
+                st.selectbox("Parcelamento", parcelas_list, key="card_install_v17")
 
         # O BOTÃO DEVE ESTAR AQUI DENTRO DO WITH ST.FORM
         btn_confirmar = st.form_submit_button("CONFIRMAR E EMITIR BILHETE")
