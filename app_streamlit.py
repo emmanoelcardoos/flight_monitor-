@@ -300,14 +300,65 @@ elif st.session_state.pagina == "reserva":
             st.info("💠 Pagamento via PIX: Link de suporte abaixo.")
             st.markdown(f"[💬 Chamar no WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
 
-        if st.form_submit_button("CONFIRMAR E EMITIR BILHETE"):
+                if st.form_submit_button("CONFIRMAR E EMITIR BILHETE"):
             if bloqueio_emissao:
                 st.error("Não é possível prosseguir: Verifique a validade do seu passaporte.")
-            elif not nome or not email:
-                st.error("Por favor, preencha os campos obrigatórios.")
+            elif not nome or not email or not documento:
+                st.error("Preencha todos os dados obrigatórios antes de pagar.")
             else:
-                st.balloons()
-                st.success("Reserva enviada com sucesso!")
+                try:
+                    with st.spinner('A processar pagamento seguro com o seu banco...'):
+                        api_token = st.secrets["DUFFEL_TOKEN"]  # Certifique-se que é o LIVE TOKEN
+                        headers = {
+                            "Authorization": f"Bearer {api_token}",
+                            "Duffel-Version": "v2",
+                            "Content-Type": "application/json"
+                        }
+
+                        # Moeda adaptada ao teu código atual
+                        moeda_pagamento = "BRL" if v["Moeda"] == "R$" else "EUR"
+
+                        # PAYLOAD PARA COBRANÇA REAL NO CARTÃO
+                        payload = {
+                            "data": {
+                                "type": "instant",
+                                "selected_offers": [v['id_offer']],
+                                "passengers": [{
+                                    "id": v['pax_ids'][0],
+                                    "given_name": nome,
+                                    "family_name": apelido,
+                                    "gender": "m",
+                                    "born_on": str(dn),
+                                    "email": email,
+                                    "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
+                                }],
+                                "payments": [{
+                                    "type": "payment_intent",
+                                    "currency": moeda_pagamento,
+                                    "amount": str(round(v['Preço'], 2))
+                                }]
+                            }
+                        }
+
+                        # Execução da Ordem
+                        res = requests.post(
+                            "https://api.duffel.com/air/orders",
+                            headers=headers,
+                            json=payload
+                        )
+
+                        if res.status_code == 201:
+                            pnr_real = res.json()["data"]["booking_reference"]
+                            enviar_email_confirmacao(nome, email, v, pnr_real)
+                            st.balloons()
+                            st.success(f"✅ PAGAMENTO APROVADO! O seu PNR é: {pnr_real}")
+                        else:
+                            erro_msg = res.json().get("errors", [{}])[0].get("message", "Falha na autorização")
+                            st.error(f"❌ CARTÃO RECUSADO: {erro_msg}")
+                            st.info("O banco negou a transação. Verifique a notificação no seu telemóvel.")
+
+                except Exception as ex:
+                    st.error(f"Erro de comunicação com o gateway: {ex}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
