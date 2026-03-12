@@ -9,6 +9,12 @@ import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
 import stripe
 
+# TESTE DE DIAGNÓSTICO (Remova após funcionar)
+if "STRIPE_SECRET_KEY" in st.secrets:
+    st.write("✅ A chave Stripe foi detectada pelo sistema!")
+else:
+    st.error("❌ O Streamlit Cloud ainda não consegue ler a chave.")
+
 stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
