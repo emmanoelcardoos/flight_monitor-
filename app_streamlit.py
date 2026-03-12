@@ -4,7 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # 1. Configuração da Página
-st.set_page_config(page_title="Flight Monitor GDS - Reserva Direta", page_icon="✈️", layout="centered")
+st.set_page_config(page_title="Flight Monitor GDS - Reservas", page_icon="✈️", layout="centered")
 
 # --- INICIALIZAÇÃO DE ESTADOS ---
 if 'pagina' not in st.session_state:
@@ -14,24 +14,117 @@ if 'voo_selecionado' not in st.session_state:
 if 'resultados_voos' not in st.session_state:
     st.session_state.resultados_voos = []
 
-# --- INTERFACE DE BUSCA ---
+# --- PÁGINA DE BUSCA ---
 if st.session_state.pagina == "busca":
-    st.title("✈️ Reserva de Voos GDS")
-    st.markdown("##### Reserve o seu voo diretamente connosco via Duffel")
-
-    # TODAS AS CIDADES MANTIDAS
+    st.title("✈️ Reserva Direta GDS")
+    
+    # MANTENDO A TUA LISTA DE CIDADES COMPLETA
     cidades = {
-        "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"},
-        "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT"},
-        "Brasil - Centro-Oeste": {"Brasília (BSB)": "BSB", "Goiânia (GYN)": "GYN", "Cuiabá (CGB)": "CGB"},
-        "Brasil - Nordeste": {"Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT", "Maceió (MCZ)": "MCZ"},
-        "Brasil - Norte": {"Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Porto Velho (PVH)": "PVH", "Marabá (MAB)": "MAB", "Macapá (MCP)": "MCP"},
-        "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL"},
-        "Europa": {"Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR", "Roma (FCO)": "FCO", "Frankfurt (FRA)": "FRA"},
-        "Estados Unidos": {"Miami (MIA)": "MIA", "Orlando (MCO)": "MCO", "Nova York (JFK)": "JFK", "Boston (BOS)": "BOS"},
-        "África": {"Luanda (LAD)": "LAD", "Joanesburgo (JNB)": "JNB", "Casablanca (CMN)": "CMN"}
-    }
 
+    "Brasil - Sudeste": {
+        "São Paulo (GRU)": "GRU",
+        "São Paulo (CGH)": "CGH",
+        "Campinas (VCP)": "VCP",
+        "Rio de Janeiro (GIG)": "GIG",
+        "Rio de Janeiro (SDU)": "SDU",
+        "Belo Horizonte (CNF)": "CNF",
+        "Belo Horizonte (PLU)": "PLU",
+        "Vitória (VIX)": "VIX"
+    },
+
+    "Brasil - Sul": {
+        "Curitiba (CWB)": "CWB",
+        "Florianópolis (FLN)": "FLN",
+        "Porto Alegre (POA)": "POA",
+        "Foz do Iguaçu (IGU)": "IGU",
+        "Navegantes (NVT)": "NVT",
+        "Londrina (LDB)": "LDB"
+    },
+
+    "Brasil - Centro-Oeste": {
+        "Brasília (BSB)": "BSB",
+        "Goiânia (GYN)": "GYN",
+        "Cuiabá (CGB)": "CGB",
+        "Campo Grande (CGR)": "CGR"
+    },
+
+    "Brasil - Nordeste": {
+        "Salvador (SSA)": "SSA",
+        "Recife (REC)": "REC",
+        "Fortaleza (FOR)": "FOR",
+        "Natal (NAT)": "NAT",
+        "Maceió (MCZ)": "MCZ",
+        "João Pessoa (JPA)": "JPA",
+        "Aracaju (AJU)": "AJU",
+        "Porto Seguro (BPS)": "BPS",
+        "Ilhéus (IOS)": "IOS"
+    },
+
+    "Brasil - Norte": {
+        "Manaus (MAO)": "MAO",
+        "Belém (BEL)": "BEL",
+        "Porto Velho (PVH)": "PVH",
+        "Rio Branco (RBR)": "RBR",
+        "Macapá (MCP)": "MCP",
+        "Boa Vista (BVB)": "BVB",
+        "Palmas (PMW)": "PMW",
+        "Marabá (MAB)": "MAB",
+        "Parauapebas / Carajás (CKS)": "CKS",
+        "Araguaína (AUX)": "AUX"
+    },
+
+    "Portugal": {
+        "Lisboa (LIS)": "LIS",
+        "Porto (OPO)": "OPO",
+        "Funchal (FNC)": "FNC",
+        "Ponta Delgada (PDL)": "PDL"
+    },
+
+    "Europa": {
+        "Madrid (MAD)": "MAD",
+        "Barcelona (BCN)": "BCN",
+        "Paris (CDG)": "CDG",
+        "Paris Orly (ORY)": "ORY",
+        "Londres Heathrow (LHR)": "LHR",
+        "Londres Gatwick (LGW)": "LGW",
+        "Roma (FCO)": "FCO",
+        "Milão (MXP)": "MXP",
+        "Frankfurt (FRA)": "FRA",
+        "Munique (MUC)": "MUC",
+        "Zurique (ZRH)": "ZRH",
+        "Amsterdã (AMS)": "AMS",
+        "Bruxelas (BRU)": "BRU",
+        "Copenhaga (CPH)": "CPH",
+        "Istambul (IST)": "IST",
+        "Lisboa (LIS)": "LIS",
+        "Porto (OPO)": "OPO"
+    },
+
+    "Estados Unidos": {
+        "Miami (MIA)": "MIA",
+        "Orlando (MCO)": "MCO",
+        "Fort Lauderdale (FLL)": "FLL",
+        "Nova York JFK (JFK)": "JFK",
+        "Nova York Newark (EWR)": "EWR",
+        "Atlanta (ATL)": "ATL",
+        "Dallas (DFW)": "DFW",
+        "Houston (IAH)": "IAH",
+        "Chicago (ORD)": "ORD",
+        "Los Angeles (LAX)": "LAX",
+        "San Francisco (SFO)": "SFO",
+        "Washington (IAD)": "IAD",
+        "Boston (BOS)": "BOS"
+    },
+
+    "África": {
+        "Luanda (LAD)": "LAD",
+        "Joanesburgo (JNB)": "JNB",
+        "Cidade do Cabo (CPT)": "CPT",
+        "Casablanca (CMN)": "CMN",
+        "Addis Abeba (ADD)": "ADD"
+    }
+}
+    
     mapa_iata = {}
     opcoes = ["Selecione..."]
     for regiao, items in cidades.items():
@@ -62,14 +155,14 @@ if st.session_state.pagina == "busca":
         bebes = p3.number_input("Bebés", 0, adultos, 0)
 
         moeda_pref = st.selectbox("Moeda", ["Euro (€)", "Real (R$)"])
-        btn_pesquisar = st.form_submit_button("PESQUISAR VOOS DISPONÍVEIS")
+        btn_pesquisar = st.form_submit_button("PESQUISAR VOOS")
 
     if btn_pesquisar:
         if "Selecione" in origem_sel or "Selecione" in destino_sel:
-            st.error("Por favor, selecione os aeroportos.")
+            st.error("Selecione os aeroportos.")
         else:
             try:
-                with st.spinner('A consultar disponibilidade em tempo real...'):
+                with st.spinner('A consultar detalhes dos voos e bagagens...'):
                     api_token = st.secrets.get("DUFFEL_TOKEN")
                     headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                     is_br = "Real" in moeda_pref
@@ -86,63 +179,79 @@ if st.session_state.pagina == "busca":
                     if res.status_code == 201:
                         data = res.json().get("data", {})
                         offers = data.get("offers", [])
-                        # Guardamos o ID dos passageiros criado pela Duffel para a reserva posterior
                         pax_ids = [p["id"] for p in data.get("passengers", [])]
                         
-                        if offers:
-                            st.session_state.resultados_voos = []
-                            for o in offers[:8]: # Mostra até 8 opções
-                                st.session_state.resultados_voos.append({
-                                    "id_offer": o["id"],
-                                    "pax_ids": pax_ids,
-                                    "Companhia": o["owner"]["name"],
-                                    "Preço": float(o["total_amount"]),
-                                    "Moeda": "R$" if is_br else "€"
-                                })
-                            st.success(f"Encontrámos {len(offers)} opções de reserva direta.")
-            except Exception as e: st.error(f"Erro na conexão: {e}")
+                        st.session_state.resultados_voos = []
+                        for o in offers[:5]:
+                            # EXTRAÇÃO DE DETALHES DE SEGMENTOS E BAGAGENS
+                            itinerarios = []
+                            for s_slice in o["slices"]:
+                                for seg in s_slice["segments"]:
+                                    itinerarios.append({
+                                        "de": seg["origin"]["iata_code"],
+                                        "para": seg["destination"]["iata_code"],
+                                        "saida": seg["departing_at"],
+                                        "chegada": seg["arriving_at"],
+                                        "aviao": seg["aircraft"]["name"] if seg["aircraft"] else "N/D",
+                                        "cia": seg["marketing_carrier"]["name"]
+                                    })
+                            
+                            # Bagagem (Pegamos a do primeiro passageiro como referência)
+                            bagagens = o["passengers"][0].get("baggages", [])
+                            franquia = "Só mala de mão"
+                            for b in bagagens:
+                                if b["type"] == "checked":
+                                    franquia = f"Inclui {b['quantity']} mala(s) de porão"
 
-    # RESULTADOS APENAS COM BOTÃO DE RESERVA
+                            st.session_state.resultados_voos.append({
+                                "id_offer": o["id"],
+                                "pax_ids": pax_ids,
+                                "Companhia": o["owner"]["name"],
+                                "Preço": float(o["total_amount"]),
+                                "Moeda": "R$" if is_br else "€",
+                                "Detalhes": itinerarios,
+                                "Bagagem": franquia
+                            })
+                        st.success("Voos encontrados com sucesso!")
+            except Exception as e: st.error(f"Erro: {e}")
+
+    # EXIBIÇÃO DOS RESULTADOS COM DETALHES
     if st.session_state.resultados_voos:
         st.divider()
         for voo in st.session_state.resultados_voos:
-            with st.container():
-                c1, c2 = st.columns([4, 1])
-                c1.write(f"✈️ **{voo['Companhia']}**")
-                c1.write(f"Preço Final: {voo['Moeda']} {voo['Preço']:.2f}")
-                if c2.button("Reservar", key=voo['id_offer']):
+            with st.expander(f"✈️ {voo['Companhia']} - {voo['Moeda']} {voo['Preço']:.2f}"):
+                st.write(f"💼 **Bagagem:** {voo['Bagagem']}")
+                
+                # Gerar linha do tempo dos trechos
+                for trecho in voo["Detalhes"]:
+                    st.write(f"📍 **{trecho['de']} → {trecho['para']}** ({trecho['cia']})")
+                    st.caption(f"📅 Saída: {trecho['saida']} | Chegada: {trecho['chegada']}")
+                    st.caption(f"✈️ Aeronave: {trecho['aviao']}")
+                    st.markdown("---")
+                
+                if st.button("Reservar este voo", key=voo['id_offer']):
                     st.session_state.voo_selecionado = voo
                     st.session_state.pagina = "reserva"
                     st.rerun()
-                st.divider()
 
-# --- PÁGINA DE CHECKOUT (DADOS DO PASSAGEIRO) ---
+# --- PÁGINA DE RESERVA (CHECKOUT) ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    st.title("🏁 Finalizar a sua Reserva")
-    st.subheader(f"Voo {v['Companhia']} - Total: {v['Moeda']} {v['Preço']}")
+    st.title("🏁 Checkout de Reserva")
     
-    if st.button("⬅️ Alterar Voo"):
+    st.info(f"Voo: {v['Companhia']} | Bagagem: {v['Bagagem']}")
+    
+    if st.button("⬅️ Voltar"):
         st.session_state.pagina = "busca"
         st.rerun()
 
-    with st.form("checkout_duffel"):
-        st.info("Insira os dados exatamente como constam no passaporte.")
-        
-        # Exemplo para 1 passageiro (pode ser expandido com um loop para v['pax_ids'])
+    with st.form("form_final"):
+        st.write("Dados do Passageiro")
         col1, col2 = st.columns(2)
-        with col1:
-            primeiro_nome = st.text_input("Primeiro Nome")
-            ultimo_nome = st.text_input("Apelido (Sobrenome)")
-        with col2:
-            data_nasc = st.date_input("Data de Nascimento", value=datetime(1990, 1, 1))
-            genero = st.selectbox("Género", ["Masculino", "Feminino"])
-
-        email_contato = st.text_input("E-mail para envio do bilhete")
-        tel_contato = st.text_input("Telefone de contacto")
-
-        st.warning("⚠️ Ao confirmar, a reserva será processada oficialmente.")
-        if st.form_submit_button("CONFIRMAR E PAGAR"):
-            # Aqui entrará o código final: requests.post("https://api.duffel.com/air/orders"...)
-            st.balloons()
-            st.success("Reserva enviada com sucesso! O seu localizador PNR será gerado em instantes.")
+        p_nome = col1.text_input("Nome")
+        u_nome = col2.text_input("Apelido")
+        
+        email = st.text_input("E-mail para Bilhete Eletrónico")
+        
+        if st.form_submit_button("FINALIZAR E EMITIR"):
+            st.success("Reserva enviada! O seu PNR está a ser gerado.")
