@@ -13,26 +13,22 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
     import stripe
     import streamlit as st
 
-    try:
-        # 1. Buscamos a chave nos secrets e guardamos na variável 'chave'
-        chave = st.secrets.get("STRIPE_SECRET_KEY")
-        
-        # 2. Verificamos se ela realmente foi encontrada
-        if not chave:
-            st.error("❌ Erro crítico: A chave STRIPE_SECRET_KEY não foi encontrada nos Secrets.")
-            return None
-            
-        # 3. Configuramos a biblioteca com a chave encontrada
-        stripe.api_key = chave
+    # 1. Pegamos a chave direto do Secret
+    stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
+    
+    if not stripe.api_key:
+        st.error("❌ Erro: STRIPE_SECRET_KEY não configurada nos Secrets.")
+        return None
 
-        # 4. Criamos a sessão de checkout
+    try:
+        # 2. Criamos a sessão
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
                 'price_data': {
                     'currency': 'eur',
                     'product_data': {
-                        'name': f"Reserva de Voo - {itinerario}",
+                        'name': f"Voo: {itinerario}",
                         'description': f"Passageiro: {nome_pax}",
                     },
                     'unit_amount': int(float(valor_eur) * 100),
@@ -43,15 +39,10 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
             success_url="https://flightmonitorec.streamlit.app/?pagamento=sucesso",
             cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
-            metadata={
-                "pax_name": nome_pax,
-                "pax_email": email_pax
-            }
         )
         return session.url
-
     except Exception as e:
-        st.error(f"Erro ao conectar com Stripe: {e}")
+        st.error(f"Erro na Stripe: {e}")
         return None
 
 def enviar_email(destinatario, assunto, corpo, anexo_url=None):
