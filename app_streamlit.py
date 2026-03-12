@@ -30,7 +30,6 @@ def guardar_alerta_planilha(dados):
 def gerar_info_reserva(companhia, origem, destino, data_ida, is_br):
     suffix = "com.br" if is_br else "pt"
     data_sky = data_ida.strftime("%y%m%d")
-    
     links_cia = {
         "TAP Air Portugal": f"https://www.flytap.com/{suffix}",
         "Azul Brazilian Airlines": "https://www.voeazul.com.br",
@@ -41,15 +40,14 @@ def gerar_info_reserva(companhia, origem, destino, data_ida, is_br):
         "Iberia": f"https://www.iberia.com/{suffix}",
         "British Airways": "https://www.britishairways.com"
     }
-    
     if companhia in links_cia:
         return links_cia[companhia], "✅ Site Oficial"
-    else:
-        return f"https://www.skyscanner.{suffix}/transport/flights/{origem}/{destino}/{data_sky}", "✈️ Ir para Skyscanner"
+    return f"https://www.skyscanner.{suffix}/transport/flights/{origem}/{destino}/{data_sky}", "✈️ Ir para Skyscanner"
 
 # --- INTERFACE ---
 st.title("✈️ Flight Monitor GDS")
 
+# LISTA COMPLETA DE CIDADES
 cidades = {
     "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"},
     "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU"},
@@ -69,9 +67,10 @@ for regiao, items in cidades.items():
         mapa_iata[nome] = iata
         opcoes.append(nome)
 
-with st.form("busca_voos"):
-    tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
-    
+# --- CONFIGURAÇÃO FORA DO FORM PARA ATUALIZAÇÃO IMEDIATA ---
+tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
+
+with st.form("busca_voos_final"):
     col1, col2 = st.columns(2)
     with col1: origem_sel = st.selectbox("Origem", opcoes)
     with col2: destino_sel = st.selectbox("Destino", opcoes)
@@ -80,12 +79,13 @@ with st.form("busca_voos"):
     with col3:
         data_ida = st.date_input("Data de Partida", value=datetime.today())
     with col4:
-        # CORREÇÃO: Bloqueia ou esconde a data de volta conforme a escolha do utilizador
+        # LÓGICA CORRIGIDA: Se for somente ida, o campo nem sequer é criado no form
         if tipo_v == "Ida e volta":
             data_volta = st.date_input("Data de Regresso", value=datetime.today() + timedelta(days=7))
         else:
-            st.info("Somente ida selecionado")
+            # Criamos uma variável fantasma para não quebrar o código abaixo
             data_volta = None
+            st.write("📅 Regresso: N/A")
 
     st.write("Passageiros")
     p1, p2, p3 = st.columns(3)
@@ -99,7 +99,7 @@ with st.form("busca_voos"):
 # --- LÓGICA DE EXECUÇÃO ---
 if btn_pesquisar:
     if "Selecione" in origem_sel or "Selecione" in destino_sel:
-        st.error("Por favor, selecione origem e destino.")
+        st.error("Selecione origem e destino.")
     else:
         try:
             with st.spinner('A pesquisar ofertas...'):
@@ -140,13 +140,9 @@ if btn_pesquisar:
 # --- EXIBIÇÃO ---
 if "voos" in st.session_state:
     st.divider()
-    st.subheader("Melhores Ofertas")
     df = pd.DataFrame(st.session_state.voos)
-    simb = st.session_state.voos[0]["Símbolo"]
-    
-    # Exibição da tabela com link dinâmico usando a label (Site Oficial ou Skyscanner)
     st.dataframe(df, column_config={
-        "Preço": st.column_config.NumberColumn("Preço", format=f"{simb} %.2f"),
+        "Preço": st.column_config.NumberColumn("Preço", format=f"{st.session_state.voos[0]['Símbolo']} %.2f"),
         "Link": st.column_config.LinkColumn("Reservar", display_text=r"(.+)"), 
         "Botão": None 
     }, use_container_width=True, hide_index=True)
@@ -155,5 +151,5 @@ if "voos" in st.session_state:
         email = st.text_input("Teu E-mail")
         if st.button("Guardar Alerta"):
             if "@" in email:
-                dados = {"email": email, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": simb}
+                dados = {"email": email, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.voos[0]['Símbolo']}
                 if guardar_alerta_planilha(dados): st.success("Alerta guardado!")
