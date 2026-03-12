@@ -24,8 +24,8 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
                 'quantity': 1,
             }],
             mode='payment',
-            # Passamos o offer_id e o email na URL para recuperar depois do reset da sessão
-            success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&offer_id={offer_id}&email={email_pax}",
+            # AQUI: Adicionamos o e-mail e o nome na URL de retorno
+            success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&email={email_pax}&nome={nome_pax}",
             cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
         )
@@ -288,15 +288,27 @@ if st.session_state.pagina == "busca":
 elif st.session_state.pagina == "reserva":
     # 1. Recuperamos o voo e tratamos se ele estiver vazio (evita a tela vermelha)
     v = st.session_state.get('voo_selecionado')
-    offer_id_url = st.query_params.get("offer_id")
+    # --- RECUPERAÇÃO VIA URL ---
+    params = st.query_params
+    email_url = params.get("email")
+    nome_url = params.get("nome")
 
-    if v is None and offer_id_url:
-        v = {
-            "Companhia": "Voo Selecionado",
-            "Segmentos": [{"de": "Origem", "para": "Destino"}],
-            "Moeda": "EUR", "Preço": 0.0, "valor_bruto_duffel": 0.0,
-            "id_offer": offer_id_url
-        }
+    if params.get("pagamento") == "sucesso":
+        if "reserva_concluida" not in st.session_state:
+            # Se o e-mail veio na URL, usamos ele!
+            destinatario = email_url if email_url else st.session_state.get('pax_email')
+            nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
+
+            if destinatario:
+                with st.spinner(f"Enviando confirmação para {destinatario}..."):
+                    corpo = f"<h1>Pagamento Confirmado! ✈️</h1><p>Olá {nome_pax}, sua reserva está sendo processada.</p>"
+                    enviar_email(destinatario, "Reserva em Processamento - Flight Monitor", corpo)
+                    st.session_state["reserva_concluida"] = True
+                    st.success(f"✅ E-mail enviado com sucesso para {destinatario}")
+            else:
+                st.warning("⚠️ Pagamento aprovado, mas o e-mail do passageiro não foi localizado para envio.")
+
+    
 
     # =========================================================
     # --- DAQUI PARA BAIXO SEGUE O SEU BLOCO DE AUTOMAÇÃO E CHECKOUT ---
