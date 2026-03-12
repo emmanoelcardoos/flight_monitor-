@@ -253,7 +253,7 @@ elif st.session_state.pagina == "reserva":
         dn = c3.date_input(
             "Data de Nascimento",
             value=datetime(1995, 1, 1),
-            max_value=datetime(2026, 12, 31)
+            max_value=datetime(2026, 2, 28)
         )
 
         documento = c4.text_input("CPF ou CC (Documento de Identidade)")
@@ -281,21 +281,19 @@ elif st.session_state.pagina == "reserva":
             st.markdown("### 💳 Cartão")
             nome_cartao = st.text_input("Nome no Cartão")
             numero_cartao = st.text_input("Número do Cartão")
+
             col_card1, col_card2 = st.columns(2)
             validade_cartao = col_card1.text_input("Data de Validade (MM/AA)")
             cvv_cartao = col_card2.text_input("CVV", type="password")
 
-            if v['Moeda'] == "R$":
-                st.selectbox(
-                    "Parcelas",
-                    [f"{i}x sem juros" for i in range(1, 11)]
-                )
-                
+            if v["Moeda"] == "R$":
+                parcelas = [f"{i}x sem juros" for i in range(1, 11)]
                 parcelas.extend([
-                     "11x com acresimo",
-                     "12x com acresimo"
-                 ])
-        
+                    "11x com acréscimo",
+                    "12x com acréscimo"
+                ])
+
+                st.selectbox("Parcelas", parcelas)
 
         else:
 
