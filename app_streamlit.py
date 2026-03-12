@@ -307,18 +307,16 @@ elif st.session_state.pagina == "reserva":
                 st.error("Preencha todos os dados obrigatórios antes de pagar.")
             else:
                 try:
-                    with st.spinner('A processar pagamento seguro com o seu banco...'):
-                        api_token = st.secrets["DUFFEL_TOKEN"]  # Certifique-se que é o LIVE TOKEN
+                    with st.spinner('Comunicando com o emissor do cartão (Visa/Mastercard)...'):
+                        api_token = st.secrets["DUFFEL_TOKEN"]
                         headers = {
                             "Authorization": f"Bearer {api_token}",
                             "Duffel-Version": "v2",
                             "Content-Type": "application/json"
                         }
 
-                        # Moeda adaptada ao teu código atual
                         moeda_pagamento = "BRL" if v["Moeda"] == "R$" else "EUR"
 
-                        # PAYLOAD PARA COBRANÇA REAL NO CARTÃO
                         payload = {
                             "data": {
                                 "type": "instant",
@@ -327,7 +325,6 @@ elif st.session_state.pagina == "reserva":
                                     "id": v['pax_ids'][0],
                                     "given_name": nome,
                                     "family_name": apelido,
-                                    "gender": "m",
                                     "born_on": str(dn),
                                     "email": email,
                                     "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
@@ -340,7 +337,6 @@ elif st.session_state.pagina == "reserva":
                             }
                         }
 
-                        # Execução da Ordem
                         res = requests.post(
                             "https://api.duffel.com/air/orders",
                             headers=headers,
@@ -348,17 +344,17 @@ elif st.session_state.pagina == "reserva":
                         )
 
                         if res.status_code == 201:
-                            pnr_real = res.json()["data"]["booking_reference"]
-                            enviar_email_confirmacao(nome, email, v, pnr_real)
-                            st.balloons()
-                            st.success(f"✅ PAGAMENTO APROVADO! O seu PNR é: {pnr_real}")
+                            st.success("Bilhete Emitido!")
                         else:
-                            erro_msg = res.json().get("errors", [{}])[0].get("message", "Falha na autorização")
-                            st.error(f"❌ CARTÃO RECUSADO: {erro_msg}")
-                            st.info("O banco negou a transação. Verifique a notificação no seu telemóvel.")
+                            erro_json = res.json()
+                            mensagem_erro = erro_json.get("errors", [{}])[0].get("message", "")
+                            codigo_erro = erro_json.get("errors", [{}])[0].get("code", "")
+
+                            st.error(f"❌ Erro do Banco: {mensagem_erro}")
+                            st.info(f"Código do Erro: {codigo_erro}")
 
                 except Exception as ex:
-                    st.error(f"Erro de comunicação com o gateway: {ex}")
+                    st.error(f"Falha técnica: {ex}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
