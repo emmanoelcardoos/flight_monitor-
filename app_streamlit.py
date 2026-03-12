@@ -293,20 +293,33 @@ elif st.session_state.pagina == "reserva":
     email_url = params.get("email")
     nome_url = params.get("nome")
 
-    if params.get("pagamento") == "sucesso":
-        if "reserva_concluida" not in st.session_state:
-            # Se o e-mail veio na URL, usamos ele!
-            destinatario = email_url if email_url else st.session_state.get('pax_email')
-            nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
+    if v is None:
+        v = {
+            "Companhia": "Voo em Processamento",
+            "Segmentos": [{"de": "---", "para": "---"}],
+            "Moeda": "EUR",
+            "Preço": 0.00
+        }
+    # --- 3. LÓGICA DE E-MAIL AUTOMÁTICO ---
+    if params.get("pagamento") == "sucesso" and "email_enviado_imediato" not in st.session_state:
+        destinatario = email_url if email_url else st.session_state.get('pax_email')
+        nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
 
-            if destinatario:
-                with st.spinner(f"Enviando confirmação para {destinatario}..."):
-                    corpo = f"<h1>Pagamento Confirmado! ✈️</h1><p>Olá {nome_pax}, sua reserva está sendo processada.</p>"
-                    enviar_email(destinatario, "Reserva em Processamento - Flight Monitor", corpo)
-                    st.session_state["reserva_concluida"] = True
-                    st.success(f"✅ E-mail enviado com sucesso para {destinatario}")
-            else:
-                st.warning("⚠️ Pagamento aprovado, mas o e-mail do passageiro não foi localizado para envio.")
+        if destinatario:
+            with st.spinner("Enviando confirmação de pagamento..."):
+                # E-MAIL 1: IMEDIATO (O que você pediu)
+                assunto = "Recebemos seu pagamento! ✈️ - Flight Monitor"
+                corpo = f"""
+                <h2>Olá {nome_pax}, o seu pagamento foi confirmado!</h2>
+                <p>Estamos agora processando a emissão do seu bilhete junto à companhia aérea.</p>
+                <p><b>O que acontece agora?</b> Nossa equipe/sistema irá validar os dados e, em breve, você receberá um segundo e-mail com o seu código de reserva (PNR) e o bilhete eletrônico.</p>
+                <hr>
+                <p>Obrigado por confiar na Flight Monitor!</p>
+                """
+                enviar_email(destinatario, assunto, corpo)
+                st.session_state["email_enviado_imediato"] = True
+                st.success(f"✅ E-mail de confirmação enviado para {destinatario}")
+
 
     
 
