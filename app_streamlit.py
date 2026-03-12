@@ -24,7 +24,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
                 'quantity': 1,
             }],
             mode='payment',
-            # AQUI ESTÁ O SEGREDO: Passamos o offer_id e o email de volta na URL
+            # Passamos o offer_id e o email na URL para recuperar depois do reset da sessão
             success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&offer_id={offer_id}&email={email_pax}",
             cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
@@ -288,18 +288,15 @@ if st.session_state.pagina == "busca":
 elif st.session_state.pagina == "reserva":
     # 1. Recuperamos o voo e tratamos se ele estiver vazio (evita a tela vermelha)
     v = st.session_state.get('voo_selecionado')
-    
-    # Se o usuário voltou da Stripe, forçamos a página a ser 'reserva'
-    if st.query_params.get("pagamento"):
-        st.session_state.pagina = "reserva"
+    offer_id_url = st.query_params.get("offer_id")
 
-    # Se não houver voo na memória (reset de sessão), avisamos amigavelmente
-    if v is None:
-        st.warning("⚠️ A sessão expirou ou o voo não foi encontrado.")
-        if st.button("Voltar para a busca"):
-            st.session_state.pagina = "busca"
-            st.rerun()
-        st.stop() # Interrompe o código aqui para não chegar na linha que dá erro
+    if v is None and offer_id_url:
+        v = {
+            "Companhia": "Voo Selecionado",
+            "Segmentos": [{"de": "Origem", "para": "Destino"}],
+            "Moeda": "EUR", "Preço": 0.0, "valor_bruto_duffel": 0.0,
+            "id_offer": offer_id_url
+        }
 
     # =========================================================
     # --- DAQUI PARA BAIXO SEGUE O SEU BLOCO DE AUTOMAÇÃO E CHECKOUT ---
@@ -383,6 +380,7 @@ elif st.session_state.pagina == "reserva":
             st.success("Dados salvos com sucesso!")
 
     # --- PAGAMENTO ---
+    # --- PAGAMENTO ---
     valor_exato_duffel = v.get("valor_bruto_duffel")
     if metodo == "Cartão de Crédito":
         if not st.session_state.get("pago", False):
@@ -390,13 +388,18 @@ elif st.session_state.pagina == "reserva":
                 if not st.session_state.get('pax_email'):
                     st.warning("⚠️ Salve os dados do passageiro (botão acima) antes de pagar.")
                 else:
-                    url = criar_checkout_stripe(valor_exato_duffel, st.session_state['pax_nome'], st.session_state['pax_email'], f"{v['Companhia']}")
+                    # PASSANDO OS 5 ARGUMENTOS CORRETAMENTE:
+                    url = criar_checkout_stripe(
+                        valor_exato_duffel, 
+                        st.session_state['pax_nome'], 
+                        st.session_state['pax_email'], 
+                        v['Companhia'],
+                        v['id_offer'] # O 5º argumento que faltava no seu erro
+                    )
                     if url:
                         st.link_button("👉 CLIQUE PARA PAGAR AGORA", url, type="primary", use_container_width=True)
         else:
             st.success("✅ Pagamento confirmado.")
-
-    st.divider()
     # O seu botão original de emissão manual segue abaixo...
     # O seu botão original continua aqui
     
