@@ -247,8 +247,8 @@ elif st.session_state.pagina == "reserva":
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome")
         apelido = c2.text_input("Apelido")
-
         email = st.text_input("E-mail")
+        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], index=0)
 
         c3, c4 = st.columns(2)
         dn = c3.date_input(
@@ -327,7 +327,7 @@ elif st.session_state.pagina == "reserva":
                                     "id": v['pax_ids'][0],
                                     "given_name": nome,
                                     "family_name": apelido,
-                                    "gender": genero_codigo,
+                                    "gender": "m" if genero_pax == "Masculino" else "f"
                                     "born_on": str(dn),
                                     "email": email,
                                     "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
