@@ -7,71 +7,10 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuração da Página
-st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
+# 1. Configuração da Página (Simples e Direta)
+st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="centered")
 
-# --- DESIGN MIDNIGHT DARK BLINDADO ---
-st.markdown("""
-    <style>
-    /* Fundo Gradiente */
-    .stApp {
-        background: radial-gradient(circle at top right, #1e293b, #0f172a) !important;
-    }
-
-    /* Card de Vidro */
-    [data-testid="stVerticalBlock"] > div:has(div.stButton) {
-        background: rgba(255, 255, 255, 0.1) !important;
-        backdrop-filter: blur(20px) !important;
-        border-radius: 20px !important;
-        padding: 40px !important;
-        border: 1px solid rgba(255, 255, 255, 0.1) !important;
-        max-width: 1100px !important;
-        margin: auto !important;
-    }
-
-    /* FORÇAR BARRAS CLARAS (ORIGEM, DESTINO, PASSAGEIROS) */
-    /* Usamos seletores universais para garantir que o tema escuro não vença */
-    div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, 
-    div[data-testid="stPopover"] > button, .stSelectbox div {
-        background-color: rgba(255, 255, 255, 0.9) !important;
-        border: none !important;
-        border-radius: 10px !important;
-        height: 45px !important;
-    }
-
-    /* Cor do texto dentro de todos os campos */
-    input, select, span, p, label, div[role="listbox"] {
-        color: #1e293b !important;
-        font-weight: 600 !important;
-    }
-
-    /* Botão de Busca Limpo e Alinhado */
-    div.stButton > button[kind="primary"] {
-        background-color: #3b82f6 !important;
-        color: white !important;
-        border-radius: 10px !important;
-        height: 45px !important;
-        width: 100% !important;
-        border: none !important;
-        font-weight: 700 !important;
-        margin-top: 0px !important;
-    }
-
-    /* Título Moderno */
-    .main-title {
-        font-size: 4rem;
-        font-weight: 900;
-        text-align: center;
-        color: white;
-        text-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        margin-bottom: 30px;
-    }
-
-    header, footer, #MainMenu {visibility: hidden;}
-    </style>
-    """, unsafe_allow_html=True)
-
-# --- FUNÇÕES DE APOIO ---
+# --- FUNÇÕES DE LÓGICA (SEM ALTERAÇÕES) ---
 def get_exchange_rate():
     try:
         res = requests.get("https://open.er-api.com/v6/latest/EUR")
@@ -91,72 +30,69 @@ def guardar_alerta_planilha(dados):
         return True
     except: return False
 
-# --- TÍTULO ---
-st.markdown('<h1 class="main-title">Flight Monitor</h1>', unsafe_allow_html=True)
+# --- INTERFACE BÁSICA (PRETO NATIVO) ---
+st.title("✈️ Flight Monitor GDS")
+st.write("Buscador de voos e monitorização de preços.")
 
-# --- DADOS ---
+# Dados
 cidades = {
     "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO"},
     "Brasil": {"São Paulo (GRU)": "GRU", "Rio de Janeiro (GIG)": "GIG"},
     "Mundo": {"Madrid (MAD)": "MAD", "Paris (CDG)": "CDG", "Miami (MIA)": "MIA"}
 }
 mapa_iata = {}
-opcoes = ["Pesquisar..."]
+opcoes = ["Selecione..."]
 for regiao, items in cidades.items():
     for nome, iata in items.items():
         mapa_iata[nome] = iata
         opcoes.append(nome)
 
-# --- CARD DE BUSCA (ALINHAMENTO TOTAL) ---
-with st.container():
-    tipo_v = st.radio("Config", ["Ida e volta", "Somente ida"], horizontal=True, label_visibility="collapsed")
+# --- FORMULÁRIO DE BUSCA ---
+with st.form("busca_voos"):
+    tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
     
-    # LINHA 1: De | Para | Passageiros | Moeda (Integrada)
-    c1, c2, c3, c4 = st.columns([7, 7, 4, 2])
-    with c1: origem_sel = st.selectbox("De", opcoes, label_visibility="collapsed", key="o_fix")
-    with c2: destino_sel = st.selectbox("Para", opcoes, label_visibility="collapsed", key="d_fix")
-    with c3:
-        pax_pop = st.popover("👤 Passageiros", use_container_width=True)
-        with pax_pop:
-            adultos = st.number_input("Adultos", 1, 9, 1)
-            criancas = st.number_input("Crianças", 0, 9, 0)
-            bebes = st.number_input("Bebés", 0, adultos, 0)
-    with c4:
-        # Mudança para Selectbox discreta para evitar o erro de Traceback
-        moeda_simbolo = st.selectbox("M", ["€", "R$"], label_visibility="collapsed")
+    col1, col2 = st.columns(2)
+    with col1:
+        origem_sel = st.selectbox("Origem", opcoes)
+    with col2:
+        destino_sel = st.selectbox("Destino", opcoes)
+        
+    col3, col4 = st.columns(2)
+    with col3:
+        data_ida = st.date_input("Data de Ida", value=datetime.today())
+    with col4:
+        data_volta = st.date_input("Data de Volta", value=datetime.today() + timedelta(days=7)) if tipo_v == "Ida e volta" else None
 
-    st.markdown("<div style='margin: 10px;'></div>", unsafe_allow_html=True)
+    st.write("Passageiros")
+    c_ad, c_cr, c_be = st.columns(3)
+    adultos = c_ad.number_input("Adultos", 1, 9, 1)
+    criancas = c_cr.number_input("Crianças", 0, 9, 0)
+    bebes = c_be.number_input("Bebés", 0, adultos, 0)
 
-    # LINHA 2: Ida | Volta | Botão Buscar (Alinhados)
-    c5, c6, c7 = st.columns([7, 7, 6])
-    with c5: data_ida = st.date_input("Ida", value=datetime.today(), label_visibility="collapsed")
-    with c6:
-        if tipo_v == "Ida e volta":
-            data_volta = st.date_input("Volta", value=datetime.today() + timedelta(days=7), label_visibility="collapsed")
-        else:
-            st.text_input("Volta", value="---", disabled=True, label_visibility="collapsed")
-            data_volta = None
-    with c7:
-        btn_pesquisar = st.button("BUSCAR VOOS", kind="primary", use_container_width=True)
+    moeda_pref = st.selectbox("Moeda de Preferência", ["Euro (€)", "Real (R$)"])
+    
+    btn_pesquisar = st.form_submit_button("PESQUISAR VOOS")
 
-# --- LÓGICA DE RESULTADOS ---
+# --- LÓGICA DE EXECUÇÃO ---
 if btn_pesquisar:
-    if "Pesquisar" in origem_sel or "Pesquisar" in destino_sel:
-        st.warning("⚠️ Selecione a origem e o destino.")
+    if "Selecione" in origem_sel or "Selecione" in destino_sel:
+        st.error("Por favor, selecione origem e destino.")
     else:
         try:
-            with st.spinner('🔎 Procurando ofertas...'):
+            with st.spinner('A pesquisar ofertas...'):
                 api_token = st.secrets.get("DUFFEL_TOKEN")
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                is_br = "Real" in moeda_pref
                 cotacao = get_exchange_rate()
                 
                 pax_list = [{"type": "adult"}] * adultos + [{"type": "child"}] * criancas + [{"type": "infant"}] * bebes
                 iata_origem, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
                 
                 slices = [{"origin": iata_origem, "destination": iata_dest, "departure_date": str(data_ida)}]
-                if data_volta: slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
+                if data_volta:
+                    slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
 
-                payload = {"data": {"slices": slices, "passengers": pax_list, "requested_currencies": ["BRL" if moeda_simbolo == "R$" else "EUR"]}}
+                payload = {"data": {"slices": slices, "passengers": pax_list, "requested_currencies": ["BRL" if is_br else "EUR"]}}
                 res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
                 
                 if res.status_code == 201:
@@ -166,22 +102,41 @@ if btn_pesquisar:
                         st.session_state.voos = [{
                             "Companhia": o["owner"]["name"],
                             "Preço": float(o["total_amount"]),
-                            "Símbolo": moeda_simbolo,
+                            "Símbolo": "R$" if is_br else "€",
                             "Link": f"https://www.skyscanner.pt/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}"
                         }]
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
-                    else: st.warning("Nenhum voo encontrado.")
-        except Exception as e: st.error(f"Erro: {e}")
+                        st.success("Voos encontrados!")
+                    else:
+                        st.warning("Nenhum voo encontrado para esta data.")
+        except Exception as e:
+            st.error(f"Erro na pesquisa: {e}")
 
-# --- EXIBIÇÃO DE RESULTADOS ---
-if "voos" in st.session_state and st.session_state.voos:
-    st.markdown("<br>", unsafe_allow_html=True)
-    with st.container():
-        st.markdown('<div style="background: rgba(255,255,255,0.1); padding: 25px; border-radius: 15px;">', unsafe_allow_html=True)
-        st.subheader("✈️ Resultados")
-        df = pd.DataFrame(st.session_state.voos)
-        st.dataframe(df, column_config={
-            "Preço": st.column_config.NumberColumn("Preço", format=f"{moeda_simbolo} %.2f"),
-            "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
-        }, use_container_width=True, hide_index=True)
-        st.markdown('</div>', unsafe_allow_html=True)
+# --- RESULTADOS ---
+if "voos" in st.session_state:
+    st.divider()
+    st.subheader("Melhor Oferta")
+    df = pd.DataFrame(st.session_state.voos)
+    simb = st.session_state.voos[0]["Símbolo"]
+    
+    st.dataframe(df, column_config={
+        "Preço": st.column_config.NumberColumn("Preço", format=f"{simb} %.2f"),
+        "Link": st.column_config.LinkColumn("Reservar", display_text="Abrir Skyscanner ✈️")
+    }, use_container_width=True, hide_index=True)
+
+    # Alerta
+    with st.expander("🔔 Ativar Alerta de Preço"):
+        email = st.text_input("Teu E-mail")
+        if st.button("Guardar Alerta"):
+            if "@" in email:
+                dados = {
+                    "email": email, "itinerario": st.session_state.itinerario,
+                    "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel],
+                    "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "",
+                    "adultos": adultos, "criancas": criancas, "bebes": bebes,
+                    "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": simb
+                }
+                if guardar_alerta_planilha(dados):
+                    st.success("Alerta guardado com sucesso!")
+            else:
+                st.error("E-mail inválido.")
