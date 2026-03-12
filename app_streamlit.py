@@ -11,7 +11,7 @@ import stripe
 
 
 # Tenta pegar de st.secrets, se não existir, fica None
-chave_stripe = st.secrets.get("STRIPE_SECRET_KEY")
+stripe.api_key = "sk_test_51TAF6HRQs5fSMOCGXMJ96KLjg18ZgfuH6p56midOvzsSAmjSim6imLcPujzex5LdZvxQ5GFYU31l72gjVu5Hpp8g00iF1KLOnq"
 
 if chave_stripe:
     stripe.api_key = chave_stripe
