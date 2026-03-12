@@ -249,6 +249,7 @@ elif st.session_state.pagina == "reserva":
         apelido = c2.text_input("Apelido")
         email = st.text_input("E-mail")
         genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], index=0)
+        titulo_pax = c_gen1.selectbox("Título", ["Sr.", "Sra.", "Srta."], key="pax_title_visual")
 
         c3, c4 = st.columns(2)
         dn = c3.date_input(
@@ -317,6 +318,7 @@ elif st.session_state.pagina == "reserva":
                         }
 
                         moeda_pagamento = "BRL" if "Real" in v["Moeda_Busca"] else "EUR"
+                        titulo_codigo = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
                         genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], key="genero_pax_visual")
                         genero_codigo = "m" if genero_pax == "Masculino" else "f"
                         payload = {
@@ -325,6 +327,7 @@ elif st.session_state.pagina == "reserva":
                                 "selected_offers": [v['id_offer']],
                                 "passengers": [{
                                     "id": v['pax_ids'][0],
+                                    "title": titulo_codigo,
                                     "given_name": nome,
                                     "family_name": apelido,
                                     "gender": "m" if genero_pax == "Masculino" else "f",
