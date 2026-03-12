@@ -16,9 +16,9 @@ def get_cotacao_ao_vivo():
         res = requests.get("https://economia.awesomeapi.com.br/last/EUR-BRL")
         if res.status_code == 200:
             return float(res.json()["EURBRL"]["bid"])
-        return 6.25
+        return 6.02
     except:
-        return 6.25
+        return 6.02
 
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
