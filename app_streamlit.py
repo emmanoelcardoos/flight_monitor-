@@ -285,13 +285,40 @@ if st.session_state.pagina == "busca":
                     st.rerun()
 
 # --- PÁGINA 2: RESERVA ---
+
 elif st.session_state.pagina == "reserva":
     # 1. Recuperamos o voo e tratamos se ele estiver vazio (evita a tela vermelha)
     v = st.session_state.get('voo_selecionado')
     # --- RECUPERAÇÃO VIA URL ---
     params = st.query_params
+    status_pagamento = params.get("pagamento")
     email_url = params.get("email")
     nome_url = params.get("nome")
+
+    if status_pagamento == "sucesso":
+        if "email_confirmacao_enviado" not in st.session_state:
+            destinatario = email_url if email_url else st.session_state.get('pax_email')
+            nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
+
+            if destinatario:
+                with st.spinner("Confirmando pagamento e enviando e-mail..."):
+                    # --- E-MAIL 1: APÓS PAGAMENTO REALIZADO ---
+                    assunto = "Pagamento Confirmado! ✈️ - Processando sua Reserva"
+                    corpo = f"""
+                    <div style="font-family: sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
+                        <h2 style="color: #003580;">Olá {nome_pax}, recebemos o seu pagamento!</h2>
+                        <p>Obrigado por escolher a <b>Flight Monitor</b>.</p>
+                        <p>Seu pagamento foi aprovado com sucesso via Stripe. Agora, nossa equipe está finalizando a emissão do seu bilhete junto à companhia aérea.</p>
+                        <p><b>Próximo passo:</b> Em instantes, você receberá um segundo e-mail contendo o seu código de reserva (PNR) e os detalhes do embarque.</p>
+                        <hr>
+                        <p style="font-size: 12px; color: #666;">Este é um e-mail automático de confirmação de transação.</p>
+                    </div>
+                    """
+                    sucesso_mail = enviar_email(destinatario, assunto, corpo)
+                    if sucesso_mail:
+                        st.session_state["email_confirmacao_enviado"] = True
+                        st.balloons()
+                        st.success(f"✅ Pagamento confirmado! E-mail enviado para {destinatario}")
 
     if v is None:
         v = {
