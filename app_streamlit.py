@@ -22,7 +22,7 @@ if st.session_state.pagina == "busca":
     st.title("✈️ Flight Monitor GDS")
     st.markdown("##### Encontre e reserve voos com detalhes completos")
 
-    # LISTA DE CIDADES COMPLETA (Mantida conforme solicitado)
+    # LISTA DE CIDADES COMPLETA
     cidades = {
         "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"},
         "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT", "Londrina (LDB)": "LDB"},
@@ -93,7 +93,6 @@ if st.session_state.pagina == "busca":
                         
                         st.session_state.resultados_voos = []
                         for o in offers[:5]:
-                            # 1. Extração Dinâmica dos Segmentos (Horários e Escalas)
                             detalhes_voo = []
                             for slice_obj in o["slices"]:
                                 for segment in slice_obj["segments"]:
@@ -106,14 +105,12 @@ if st.session_state.pagina == "busca":
                                         "aviao": segment["aircraft"]["name"] if segment["aircraft"] else "N/D"
                                     })
                             
-                            # 2. Extração de Bagagem
                             bagagem_info = "Só mala de mão"
                             if o["passengers"][0].get("baggages"):
                                 malas_porao = [b for b in o["passengers"][0]["baggages"] if b["type"] == "checked"]
                                 if malas_porao:
                                     bagagem_info = f"Inclui {malas_porao[0]['quantity']} mala(s) de porão"
 
-                            # 3. Cálculo de Mark-up
                             preco_venda = float(o["total_amount"]) * (1 + COMISSAO_PERCENTUAL)
 
                             st.session_state.resultados_voos.append({
@@ -128,7 +125,6 @@ if st.session_state.pagina == "busca":
                         st.success("Resultados carregados.")
             except Exception as e: st.error(f"Erro: {e}")
 
-    # --- EXIBIÇÃO COM DETALHES ---
     if st.session_state.resultados_voos:
         st.divider()
         for v in st.session_state.resultados_voos:
@@ -145,27 +141,61 @@ if st.session_state.pagina == "busca":
                     st.session_state.pagina = "reserva"
                     st.rerun()
 
-# --- PÁGINA 2: CHECKOUT ---
+# --- PÁGINA 2: CHECKOUT COMPLETO ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    st.title("🏁 Checkout de Reserva")
-    st.write(f"Companhia: **{v['Companhia']}** | Total: **{v['Moeda']} {v['Preço']:.2f}**")
+    st.title("🏁 Finalizar Reserva e Pagamento")
+    st.info(f"Voo Selecionado: **{v['Companhia']}** | Valor Total: **{v['Moeda']} {v['Preço']:.2f}**")
     
     if st.button("⬅️ Voltar"):
         st.session_state.pagina = "busca"
         st.rerun()
 
     with st.form("final_checkout"):
-        st.subheader("Dados do Passageiro e Pagamento")
+        # SEÇÃO 1: DADOS DO PASSAGEIRO
+        st.subheader("👤 Dados do Passageiro")
         c1, c2 = st.columns(2)
-        nome = c1.text_input("Nome")
-        apelido = c2.text_input("Apelido")
-        email = st.text_input("E-mail para Bilhete")
+        nome_pax = c1.text_input("Nome Próprio")
+        sobrenome_pax = c2.text_input("Apelido / Sobrenome")
         
+        c3, c4 = st.columns(2)
+        doc_tipo = c3.selectbox("Tipo de Documento", ["CPF (Brasil)", "Passaporte", "Cartão de Cidadão (PT)"])
+        doc_numero = c4.text_input("Número do Documento")
+        
+        c5, c6 = st.columns(2)
+        data_nasc = c5.date_input("Data de Nascimento", value=datetime(1990, 1, 1))
+        genero = c6.selectbox("Género", ["Masculino (m)", "Feminino (f)"])
+
         st.markdown("---")
-        n_cartao = st.text_input("Número do Cartão (Teste: 4242 4242 4242 4242)")
+        st.subheader("📩 Contacto")
+        c7, c8 = st.columns(2)
+        email_pax = c7.text_input("E-mail para envio do bilhete", placeholder="seu@email.com")
+        tel_pax = c8.text_input("Telefone de contacto", placeholder="+351 ... ou +55 ...")
+
+        # SEÇÃO 2: DADOS DE PAGAMENTO
+        st.markdown("---")
+        st.subheader("💳 Detalhes do Pagamento")
         
-        if st.form_submit_button("CONFIRMAR E PAGAR"):
-            # Aqui entra a lógica de st.balloons() e PNR gerado
-            st.success(f"Reserva efetuada! PNR de teste gerado para {nome}.")
-            st.balloons()
+        num_cartao = st.text_input("Número do Cartão", max_chars=19, placeholder="0000 0000 0000 0000")
+        
+        col_c1, col_c2, col_c3 = st.columns([2, 1, 1])
+        titular_cartao = col_c1.text_input("Nome do Titular (como no cartão)")
+        validade_cartao = col_c2.text_input("Validade (MM/AA)", max_chars=5)
+        cvv_cartao = col_c3.text_input("CVV", type="password", max_chars=4)
+
+        st.caption("🔒 Transação encriptada via Duffel Payments Gateway.")
+
+        if st.form_submit_button("CONFIRMAR RESERVA E PAGAR"):
+            if not nome_pax or not email_pax or not num_cartao or not doc_numero:
+                st.error("❌ Por favor, preencha todos os campos obrigatórios.")
+            else:
+                with st.spinner('A processar pagamento e a gerar Localizador (PNR)...'):
+                    # Aqui integraria a chamada real: requests.post("https://api.duffel.com/air/orders", ...)
+                    st.balloons()
+                    st.success(f"🎉 Reserva efetuada com sucesso para {nome_pax}!")
+                    st.markdown(f"""
+                    **Resumo da Operação:**
+                    * **Localizador (PNR):** `GTD78X` (Simulação)
+                    * **Status:** Confirmado
+                    * **E-mail:** Enviado para {email_pax}
+                    """)
