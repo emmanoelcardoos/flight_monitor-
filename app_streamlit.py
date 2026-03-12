@@ -56,7 +56,7 @@ def enviar_email(destinatario, assunto, corpo, anexo_url=None):
         msg['To'] = destinatario
         msg['Subject'] = assunto
 
-        msg.attach(MIMEText(corpo, 'plain'))
+        msg.attach(MIMEText(corpo_html, 'html'))
 
         # Lógica para anexo (PDF da Duffel)
         if anexo_url:
@@ -406,102 +406,114 @@ elif st.session_state.pagina == "reserva":
     # --- BOTÃO FINAL DE EMISSÃO ---
     st.divider()
     if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
-
-        # 1. VALIDAÇÃO DE SEGURANÇA (TRAVA)
         if metodo == "Cartão de Crédito" and not st.session_state.get("pago", False):
-            st.error("❌ Erro: O pagamento ainda não foi confirmado pela Stripe. Pague primeiro no link acima.")
-
+            st.error("❌ Erro: O pagamento ainda não foi confirmado pela Stripe.")
         elif not nome or not email:
-            st.error("❌ Erro: Preencha Nome e E-mail e clique em 'Salvar Dados do Passageiro'.")
-
+            st.error("❌ Erro: Preencha os dados do passageiro.")
         else:
-            # Se passou na trava, inicia a emissão real
             try:
-                # 2. Preparar Itinerário para o E-mail
-                detalhes_voo = ""
-                for seg in v['Segmentos']:
-                    detalhes_voo += f"✈️ {seg['companhia']} | De: {seg['de']} ➔ Para: {seg['para']} | Voo: {seg['voo']}\n"
-
-                # 3. E-MAIL 1: PROCESSAMENTO (Acalma o cliente)
-                enviar_email(
-                    destinatario=email,
-                    assunto="Sua compra está em processamento! ✈️",
-                    corpo=f"Olá {nome},\n\nRecebemos sua autorização de pagamento via Stripe. Estamos finalizando a emissão junto à Companhia Aérea.\n\nDetalhes do Itinerário:\n{detalhes_voo}"
-                )
-
-                with st.spinner('Iniciando processo de emissão...'):
+                with st.spinner('Emitindo bilhete e gerando confirmação...'):
+                    # Configurações API Duffel
                     api_token = st.secrets["DUFFEL_TOKEN"]
-                    headers = {
-                        "Authorization": f"Bearer {api_token}",
-                        "Duffel-Version": "v2",
-                        "Content-Type": "application/json"
-                    }
-
-                    gen_code = "m" if genero_pax == "Masculino" else "f"
-                    tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
+                    headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                    
                     valor_exato_duffel = v.get("valor_bruto_duffel")
+                    gen_code = "m" if genero_pax == "Masculino" else "f"
+                    tit_code = "mr" if titulo_pax == "Sr." else "mrs"
 
-                    # 4. CRIAR O PEDIDO NA DUFFEL (Usando seu saldo balance)
+                    # Criar Ordem na Duffel
                     payload = {
                         "data": {
                             "type": "instant",
                             "selected_offers": [v['id_offer']],
                             "passengers": [{
-                                "id": v['pax_ids'][0],
-                                "title": tit_code,
-                                "given_name": nome,
-                                "family_name": apelido,
-                                "gender": gen_code,
-                                "born_on": str(dn),
-                                "email": email,
-                                "phone_number": "+351936797003"
+                                "id": v['pax_ids'][0], "title": tit_code, "given_name": nome,
+                                "family_name": apelido, "gender": gen_code, "born_on": str(dn),
+                                "email": email, "phone_number": "+351936797003"
                             }],
-                            "payments": [{
-                                "type": "balance",
-                                "currency": "EUR",
-                                "amount": valor_exato_duffel
-                            }],
-                            "metadata": {
-                                "stripe_status": "pago_pelo_cliente"
-                            }
+                            "payments": [{"type": "balance", "currency": "EUR", "amount": valor_exato_duffel}],
+                            "metadata": {"pagamento": "stripe_concluido"}
                         }
                     }
 
-                res_ordem = requests.post(
-                    "https://api.duffel.com/air/orders",
-                    headers=headers,
-                    json=payload
-                )
+                    res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
-                if res_ordem.status_code == 201:
-                    res_data = res_ordem.json()['data']
-                    pnr = res_data['booking_reference']
+                    if res_ordem.status_code == 201:
+                        dados_reserva = res_ordem.json()['data']
+                        pnr = dados_reserva['booking_reference']
+                        destino_f = v['Segmentos'][-1]['para']
+                        logo_cia = f"https://images.duffel.com/airlines/{v['Segmentos'][0]['companhia_iata']}.png"
 
-                    # Captura o PDF se disponível
-                    link_pdf = ""
-                    if 'documents' in res_data and res_data['documents']:
-                        link_pdf = res_data['documents'][0].get('url', "")
+                        # --- MONTAGEM DO DESIGN DO EMAIL (PADRÃO DECOLAR) ---
+                        html_design = f"""
+                        <html>
+                        <body style="font-family: Arial, sans-serif; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;">
+                            <div style="max-width: 600px; margin: auto; background: white; border-radius: 8px; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1);">
+                                
+                                <div style="background-color: #003580; padding: 40px 20px; text-align: center; color: white;">
+                                    <div style="font-size: 50px; margin-bottom: 10px;">✈️</div>
+                                    <h1 style="margin: 0; font-size: 24px;">Hey {nome}!</h1>
+                                    <p style="font-size: 18px; opacity: 0.9;">O seu voo para {destino_f} foi emitido!</p>
+                                </div>
 
-                    # 5. E-MAIL 2: BILHETE FINAL + PDF
-                    enviar_email(
-                        destinatario=email,
-                        assunto=f"Sua viagem está confirmada! PNR: {pnr}",
-                        corpo=f"Olá {nome},\n\nSeu bilhete foi emitido com sucesso!\n\nPNR: {pnr}\n\nO bilhete oficial segue em anexo (link abaixo).\nLink: {link_pdf}\n\nBoa viagem!",
-                        anexo_url=link_pdf
-                    )
+                                <div style="padding: 20px; border-bottom: 2px solid #f4f4f4; display: flex; align-items: center;">
+                                    <div style="flex-grow: 1;">
+                                        <span style="color: #888; font-size: 12px; text-transform: uppercase; font-weight: bold;">Número da Reserva</span><br>
+                                        <strong style="font-size: 28px; color: #003580; letter-spacing: 1px;">{pnr}</strong>
+                                    </div>
+                                    <img src="{logo_cia}" width="70" style="margin-left: 20px; border-radius: 5px;">
+                                </div>
 
-                    st.balloons()
-                    st.success(f"Bilhete Emitido com Sucesso! PNR: {pnr}")
+                                <div style="padding: 20px;">
+                                    <h3 style="color: #003580; margin-bottom: 15px;">📍 Detalhes do Itinerário</h3>
+                                    {"".join([f'''
+                                    <div style="padding: 15px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; background-color: #fafafa;">
+                                        <strong style="color: #333;">{s['companhia']} - Voo {s['voo']}</strong><br>
+                                        <div style="margin-top: 8px; font-size: 15px;">
+                                            <span style="color: #003580; font-weight: bold;">{s['de']}</span> ➔ <span style="color: #003580; font-weight: bold;">{s['para']}</span>
+                                        </div>
+                                        <div style="margin-top: 5px; font-size: 13px; color: #666;">
+                                            📅 Partida: {s['saida']} | Chegada: {s['chegada']}
+                                        </div>
+                                    </div>
+                                    ''' for s in v['Segmentos']])}
+                                </div>
 
-                else:
-                    erro_api = res_ordem.json().get('errors', [{}])[0].get('message', 'Erro desconhecido')
-                    st.error(f"Erro na Emissão: {erro_api}")
+                                <div style="padding: 20px; background-color: #fcfcfc; border-top: 1px solid #eee;">
+                                    <h3 style="margin-top: 0;">💰 Resumo do Pagamento</h3>
+                                    <table width="100%" style="font-size: 15px;">
+                                        <tr><td style="padding: 5px 0; color: #666;">Tarifa Aérea e Taxas</td><td align="right">EUR {valor_exato_duffel}</td></tr>
+                                        <tr><td style="padding: 10px 0; font-size: 18px; font-weight: bold;">TOTAL</td><td align="right" style="font-size: 20px; font-weight: bold; color: #28a745;">EUR {valor_exato_duffel}</td></tr>
+                                    </table>
+                                    <p style="font-size: 12px; color: #999;">Forma de pagamento: Cartão de Crédito via Stripe</p>
+                                </div>
 
-                    if "insufficient_balance" in str(res_ordem.json()):
-                        st.warning("⚠️ Atenção: Saldo insuficiente na conta da agência para emitir.")
+                                <div style="padding: 30px 20px; text-align: center; background-color: #fff;">
+                                    <a href="https://flightmonitorec.streamlit.app/" style="background-color: #003580; color: white; padding: 15px 25px; text-decoration: none; border-radius: 6px; font-weight: bold; display: inline-block; margin: 10px;">Acessar Área do Cliente</a>
+                                    <br>
+                                    <a href="https://www.google.com/search?q=site+oficial+{v['Segmentos'][0]['companhia'].replace(' ', '+')}" style="color: #003580; text-decoration: underline; font-size: 14px;">Ir para site oficial da Cia Aérea</a>
+                                </div>
 
-            except Exception as ex:
-                st.error(f"Falha técnica: {ex}")
+                                <div style="padding: 20px; background-color: #333; color: #ccc; font-size: 12px; text-align: center;">
+                                    <strong>Informações Importantes:</strong><br>
+                                    Chegue ao aeroporto com 3h de antecedência. <br>
+                                    Apresente seu PNR {pnr} e passaporte no balcão da cia aérea.<br>
+                                    © {datetime.now().year} Sua Agência de Viagens
+                                </div>
+                            </div>
+                        </body>
+                        </html>
+                        """
+
+                        enviar_email(destinatario=email, assunto=f"Eba! Sua viagem para {destino_f} está confirmada!", corpo_html=html_design)
+                        
+                        st.balloons()
+                        st.success(f"Bilhete Emitido com Sucesso! PNR: {pnr}")
+                    else:
+                        st.error(f"Erro na Duffel: {res_ordem.json()['errors'][0]['message']}")
+
+            except Exception as e:
+                st.error(f"Erro técnico: {e}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
