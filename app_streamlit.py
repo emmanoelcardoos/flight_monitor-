@@ -348,9 +348,24 @@ elif st.session_state.pagina == "reserva":
     st.title("🏁 Checkout")
     st.divider()
 
-    # Morada Fiscal
+    # --- MORADA FISCAL (DE VOLTA!) ---
     st.subheader("🏠 Morada Fiscal / Faturamento")
-    # ... (Mantenha seu código de morada fiscal aqui) ...
+    if "Real" in v.get("Moeda_Busca", "Real"):
+        m1, m2, m3 = st.columns([3, 1, 1])
+        rua = m1.text_input("Rua/Logradouro")
+        num = m2.text_input("Nº")
+        apt = m3.text_input("Apto/Bloco")
+        m4, m5, m6 = st.columns([2, 2, 1])
+        bairro = m4.text_input("Bairro")
+        cidade = m5.text_input("Cidade")
+        estado = m6.text_input("Estado (UF)")
+        cep = st.text_input("CEP")
+    else:
+        morada = st.text_input("Morada / Address Line")
+        ce1, ce2 = st.columns(2)
+        distrito = ce1.text_input("Distrito")
+        cod_postal = ce2.text_input("Código Postal")
+        pais_fiscal = st.text_input("País")
 
     metodo = st.radio("Método de pagamento:", ["Cartão de Crédito", "PIX"], horizontal=True)
 
