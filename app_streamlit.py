@@ -126,36 +126,63 @@ if st.session_state.pagina == "busca":
                     st.session_state.pagina = "reserva"
                     st.rerun()
 
-# --- PÁGINA 2: RESERVA ---
+# --- PÁGINA 2: RESERVA (VERSÃO CORRIGIDA) ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
     st.title("🏁 Checkout Seguro")
     
-    with st.form("checkout"):
+    with st.form("checkout_v14"):
         st.subheader("👤 Dados do Passageiro")
         c1, c2 = st.columns(2)
         n = c1.text_input("Nome Próprio")
         a = c2.text_input("Apelido")
         e = st.text_input("E-mail para Bilhete")
-        # Correção da Data: Até Março de 2026 (ajustado para permitir jovens e crianças)
-        dn = st.date_input("Data de Nascimento", value=datetime(1995,1,1), max_value=datetime(2026,3,12))
+        # Data de nascimento permitindo até 2026
+        dn = st.date_input("Data de Nascimento", value=datetime(1995,1,1), max_value=datetime(2026,12,31))
         
         st.divider()
         st.subheader("💳 Pagamento")
-        metodo = st.radio("Selecione o método:", ["Cartão de Crédito", "PIX"], horizontal=True)
         
-        # A MÁGICA: Só mostra campos do cartão se NÃO for PIX
+        # Seleção do método
+        metodo = st.radio("Selecione o método de pagamento:", ["Cartão de Crédito", "PIX"], horizontal=True)
+        
+        # --- LÓGICA DINÂMICA DO CARTÃO ---
         if metodo == "Cartão de Crédito":
-            st.text_input("Número do Cartão")
+            st.markdown("#### Detalhes do Cartão")
+            st.text_input("Número do Cartão", placeholder="0000 0000 0000 0000")
+            st.text_input("Nome Impresso no Cartão")
+            
             cc1, cc2 = st.columns(2)
-            cc1.text_input("Validade (MM/AA)")
-            cc2.text_input("CVV")
+            cc1.text_input("Validade (MM/AA)", placeholder="MM/AA")
+            cc2.text_input("CVV", type="password", placeholder="123")
+            
+            # Lógica de Parcelamento
             if v['Moeda'] == "R$":
-                st.selectbox("Parcelas", ["1x de " + f"{v['Preço']:.2f} sem juros", "6x sem juros", "12x sem juros (Promoção)"])
+                opcoes_parcelas = [f"{i}x sem juros" for i in range(1, 11)]
+                opcoes_parcelas.extend(["11x (com taxas operacionais)", "12x (com taxas operacionais)"])
+                st.selectbox("Opções de Parcelamento", opcoes_parcelas)
+            else:
+                st.info("Pagamentos em Euro/Dólar são processados em 1x (à vista).")
+                
+        # --- LÓGICA DO PIX ---
         else:
-            st.info("💠 **Pagamento PIX:** Atendimento Humano Obrigatório.")
-            st.markdown(f"[💬 Chamar no WhatsApp para Chave PIX](https://wa.me/{WHATSAPP_SUPORTE}?text=Olá,%20quero%20pagar%20via%20PIX)")
+            st.info("💠 **Pagamento PIX:** Esta modalidade requer atendimento humano para validação.")
+            st.warning("Os campos de cartão foram ocultados. Prossiga para gerar o link de suporte.")
+            st.markdown(f"""
+                <a href="https://wa.me/{WHATSAPP_SUPORTE}?text=Olá,%20quero%20concluir%20minha%20reserva%20via%20PIX" target="_blank">
+                    <button style="background-color: #25D366; color: white; border: none; padding: 10px 20px; border-radius: 5px; font-weight: bold; cursor: pointer;">
+                        💬 Chamar no WhatsApp para Chave PIX
+                    </button>
+                </a>
+            """, unsafe_allow_html=True)
 
-        if st.form_submit_button("EMITIR BILHETE AGORA"):
-            # Lógica de Emissão Duffel Real
-            st.success("Emissão solicitada! Verifique seu e-mail em instantes.")
+        st.divider()
+        # O botão de submissão deve estar sempre visível ao final do form
+        emitir = st.form_submit_button("CONFIRMAR E EMITIR BILHETE")
+        
+        if emitir:
+            if not n or not e:
+                st.error("Por favor, preencha o nome e o e-mail obrigatoriamente.")
+            else:
+                # Aqui entra a sua chamada real da Duffel que já validamos
+                st.success(f"Emissão solicitada para {n}! Verifique o e-mail {e} em instantes.")
