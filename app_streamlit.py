@@ -150,7 +150,61 @@ elif st.session_state.pagina == "reserva":
         validade = col_c2.text_input("MM/AA")
         cvv = col_c3.text_input("CVV", type="password")
 
+        # --- DENTRO DO st.form("checkout_final") ---
         if st.form_submit_button("CONFIRMAR RESERVA E PAGAR"):
-            # Lógica final de Order Duffel aqui
-            st.balloons()
-            st.success("Pagamento autorizado! A sua reserva está a ser emitida.")
+            if not nome or not email or not n_cartao:
+                st.error("Preencha todos os campos obrigatórios.")
+            else:
+                try:
+                    with st.spinner('A emitir o seu bilhete eletrónico...'):
+                        api_token = st.secrets.get("DUFFEL_TOKEN")
+                        headers = {
+                            "Authorization": f"Bearer {api_token}",
+                            "Duffel-Version": "v2",
+                            "Content-Type": "application/json"
+                        }
+
+                        # 1. Montar o passageiro (seguindo a estrutura da Duffel)
+                        # Nota: No modo real, teríamos de preencher todos os IDs de pax_ids
+                        pax_data = [
+                            {
+                                "id": v['pax_ids'][0],
+                                "given_name": nome,
+                                "family_name": apelido,
+                                "gender": "m", # Pode ser dinâmico
+                                "born_on": "1990-01-01", # Pode ser dinâmico
+                                "email": email,
+                                "phone_number": "+351910000000"
+                            }
+                        ]
+
+                        # 2. Criar a Order (Reserva Instantânea)
+                        payload_order = {
+                            "data": {
+                                "type": "instant",
+                                "selected_offers": [v['id_offer']],
+                                "passengers": pax_data,
+                                "payments": [
+                                    {
+                                        "type": "balance", # No Sandbox usamos 'balance' ou 'arc_bsp_cash'
+                                        "currency": v['Moeda'].replace("€", "EUR").replace("R$", "BRL"),
+                                        "amount": str(v['Preço'])
+                                    }
+                                ]
+                            }
+                        }
+
+                        res_order = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload_order)
+                        
+                        if res_order.status_code == 201:
+                            order = res_order.json()["data"]
+                            st.balloons()
+                            st.success(f"✅ Reserva Confirmada! Localizador (PNR): **{order['booking_reference']}**")
+                            st.write(f"Companhia: {order['owner']['name']}")
+                            st.info("No modo real, o bilhete seria agora enviado para o seu e-mail.")
+                        else:
+                            erro = res_order.json().get("errors", [{}])[0].get("message", "Erro desconhecido")
+                            st.error(f"A companhia aérea recusou a reserva: {erro}")
+                            
+                except Exception as e:
+                    st.error(f"Erro técnico no processamento: {e}")
