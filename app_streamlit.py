@@ -4,10 +4,10 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 # --- CONFIGURAÇÃO DE NEGÓCIO ---
-COMISSAO_PERCENTUAL = 0.10  # 10% de lucro sobre o custo da Duffel
+COMISSAO_PERCENTUAL = 0.10  
 # ------------------------------
 
-st.set_page_config(page_title="Flight Monitor GDS - Checkout", page_icon="✈️", layout="centered")
+st.set_page_config(page_title="Flight Monitor GDS - REAL BOOKING", page_icon="✈️", layout="centered")
 
 # --- INICIALIZAÇÃO DE ESTADOS ---
 if 'pagina' not in st.session_state:
@@ -20,9 +20,9 @@ if 'resultados_voos' not in st.session_state:
 # --- PÁGINA 1: BUSCA E RESULTADOS ---
 if st.session_state.pagina == "busca":
     st.title("✈️ Flight Monitor GDS")
-    st.markdown("##### Encontre e reserve voos com detalhes completos")
+    st.markdown("##### Reservas Reais via Duffel API")
 
-    # LISTA DE CIDADES COMPLETA
+    # LISTA DE CIDADES COMPLETA (Mantida conforme solicitado)
     cidades = {
         "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"},
         "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT", "Londrina (LDB)": "LDB"},
@@ -44,7 +44,7 @@ if st.session_state.pagina == "busca":
 
     tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
 
-    with st.form("busca_voos_v3"):
+    with st.form("busca_voos_v4"):
         col1, col2 = st.columns(2)
         origem_sel = col1.selectbox("Origem", opcoes_lista)
         destino_sel = col2.selectbox("Destino", opcoes_lista)
@@ -71,7 +71,7 @@ if st.session_state.pagina == "busca":
             st.error("Selecione origem e destino.")
         else:
             try:
-                with st.spinner('A processar detalhes de voo e bagagem...'):
+                with st.spinner('A processar tarifas reais...'):
                     api_token = st.secrets.get("DUFFEL_TOKEN")
                     headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                     is_br = "Real" in moeda_pref
@@ -89,7 +89,7 @@ if st.session_state.pagina == "busca":
                     if res.status_code == 201:
                         data_res = res.json()["data"]
                         offers = data_res.get("offers", [])
-                        pax_ids = [p["id"] for p in data_res.get("passengers", [])]
+                        pax_ids_res = [p["id"] for p in data_res.get("passengers", [])]
                         
                         st.session_state.resultados_voos = []
                         for o in offers[:5]:
@@ -115,14 +115,14 @@ if st.session_state.pagina == "busca":
 
                             st.session_state.resultados_voos.append({
                                 "id_offer": o["id"],
-                                "pax_ids": pax_ids,
+                                "pax_ids": pax_ids_res,
                                 "Companhia": o["owner"]["name"],
                                 "Preço": preco_venda,
                                 "Moeda": "R$" if is_br else "€",
                                 "Segmentos": detalhes_voo,
                                 "Bagagem": bagagem_info
                             })
-                        st.success("Resultados carregados.")
+                        st.success("Tarifas atualizadas.")
             except Exception as e: st.error(f"Erro: {e}")
 
     if st.session_state.resultados_voos:
@@ -133,7 +133,6 @@ if st.session_state.pagina == "busca":
                 for seg in v["Segmentos"]:
                     st.write(f"📍 **{seg['origem']} → {seg['destino']}** ({seg['cia']})")
                     st.caption(f"🕒 Saída: {seg['saida']} | Chegada: {seg['chegada']}")
-                    st.caption(f"✈️ Aeronave: {seg['aviao']}")
                     st.markdown("---")
                 
                 if st.button("Reservar este Voo", key=v['id_offer']):
@@ -141,61 +140,89 @@ if st.session_state.pagina == "busca":
                     st.session_state.pagina = "reserva"
                     st.rerun()
 
-# --- PÁGINA 2: CHECKOUT COMPLETO ---
+# --- PÁGINA 2: RESERVA REAL ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    st.title("🏁 Finalizar Reserva e Pagamento")
-    st.info(f"Voo Selecionado: **{v['Companhia']}** | Valor Total: **{v['Moeda']} {v['Preço']:.2f}**")
+    st.title("🏁 Finalizar Compra Real")
+    st.info(f"Voo: **{v['Companhia']}** | Total: **{v['Moeda']} {v['Preço']:.2f}**")
     
-    if st.button("⬅️ Voltar"):
+    if st.button("⬅️ Alterar Voo"):
         st.session_state.pagina = "busca"
         st.rerun()
 
-    with st.form("final_checkout"):
-        # SEÇÃO 1: DADOS DO PASSAGEIRO
+    with st.form("final_real_checkout"):
         st.subheader("👤 Dados do Passageiro")
         c1, c2 = st.columns(2)
-        nome_pax = c1.text_input("Nome Próprio")
-        sobrenome_pax = c2.text_input("Apelido / Sobrenome")
+        p_nome = c1.text_input("Primeiro Nome")
+        p_sobrenome = c2.text_input("Apelido / Sobrenome")
         
         c3, c4 = st.columns(2)
-        doc_tipo = c3.selectbox("Tipo de Documento", ["CPF (Brasil)", "Passaporte", "Cartão de Cidadão (PT)"])
-        doc_numero = c4.text_input("Número do Documento")
-        
+        # AJUSTE DA DATA DE NASCIMENTO (1900 até 2026)
+        data_nasc = c3.date_input("Data de Nascimento", 
+                                  value=datetime(1990, 1, 1),
+                                  min_value=datetime(1900, 1, 1),
+                                  max_value=datetime.today())
+        p_genero = c4.selectbox("Género", ["m", "f"])
+
         c5, c6 = st.columns(2)
-        data_nasc = c5.date_input("Data de Nascimento", value=datetime(1990, 1, 1))
-        genero = c6.selectbox("Género", ["Masculino (m)", "Feminino (f)"])
+        p_doc_tipo = c5.selectbox("Tipo de Documento", ["passport", "id_card"])
+        p_doc_num = c6.text_input("Número do Documento")
+
+        email_pax = st.text_input("E-mail para Bilhete Eletrónico")
+        tel_pax = st.text_input("Telefone (com DDI, ex: +351...)")
 
         st.markdown("---")
-        st.subheader("📩 Contacto")
-        c7, c8 = st.columns(2)
-        email_pax = c7.text_input("E-mail para envio do bilhete", placeholder="seu@email.com")
-        tel_pax = c8.text_input("Telefone de contacto", placeholder="+351 ... ou +55 ...")
-
-        # SEÇÃO 2: DADOS DE PAGAMENTO
-        st.markdown("---")
-        st.subheader("💳 Detalhes do Pagamento")
-        
-        num_cartao = st.text_input("Número do Cartão", max_chars=19, placeholder="0000 0000 0000 0000")
+        st.subheader("💳 Detalhes de Pagamento")
+        num_cartao = st.text_input("Número do Cartão")
         
         col_c1, col_c2, col_c3 = st.columns([2, 1, 1])
-        titular_cartao = col_c1.text_input("Nome do Titular (como no cartão)")
-        validade_cartao = col_c2.text_input("Validade (MM/AA)", max_chars=5)
-        cvv_cartao = col_c3.text_input("CVV", type="password", max_chars=4)
+        titular_cartao = col_c1.text_input("Nome no Cartão")
+        validade_cartao = col_c2.text_input("Validade (MM/AA)")
+        cvv_cartao = col_c3.text_input("CVV", type="password")
 
-        st.caption("🔒 Transação encriptada via Duffel Payments Gateway.")
+        st.caption("🔒 Ao clicar, a transação será processada via Duffel Payments.")
 
         if st.form_submit_button("CONFIRMAR RESERVA E PAGAR"):
-            if not nome_pax or not email_pax or not num_cartao or not doc_numero:
-                st.error("❌ Por favor, preencha todos os campos obrigatórios.")
+            if not p_nome or not email_pax or not num_cartao:
+                st.error("Todos os campos de identificação e pagamento são obrigatórios.")
             else:
-                with st.spinner('A processar pagamento e a gerar Localizador (PNR)...'):
-                    # Aqui integraria a chamada real: requests.post("https://api.duffel.com/air/orders", ...)
-                    st.balloons()
-                    st.success(f"🎉 Reserva efetuada com sucesso para {nome_pax}!")
-                    st.markdown(f"""
-                    **Resumo da Operação:**
-                    * **Localizador (PNR):** `GTD78X` (Simulação)
-                    * **Status:** Confirmado
-                    * **E-mail:** Enviado para {email_pax}
-                    """)
+                try:
+                    with st.spinner('A comunicar com a companhia aérea...'):
+                        api_token = st.secrets.get("DUFFEL_TOKEN")
+                        headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                        
+                        # MONTAGEM DA RESERVA REAL
+                        pax_data = [{
+                            "id": v['pax_ids'][0],
+                            "given_name": p_nome,
+                            "family_name": p_sobrenome,
+                            "gender": p_genero,
+                            "born_on": str(data_nasc),
+                            "email": email_pax,
+                            "phone_number": tel_pax
+                        }]
+
+                        payload_order = {
+                            "data": {
+                                "type": "instant",
+                                "selected_offers": [v['id_offer']],
+                                "passengers": pax_data,
+                                "payments": [{
+                                    "type": "balance", 
+                                    "currency": v['Moeda'].replace("€", "EUR").replace("R$", "BRL"),
+                                    "amount": str(v['Preço'])
+                                }]
+                            }
+                        }
+
+                        res_order = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload_order)
+                        
+                        if res_order.status_code == 201:
+                            order = res_order.json()["data"]
+                            st.balloons()
+                            st.success(f"✅ BILHETE EMITIDO! PNR: **{order['booking_reference']}**")
+                            st.markdown(f"Enviado para: **{email_pax}**")
+                        else:
+                            erro_msg = res_order.json().get("errors", [{}])[0].get("message", "Erro na emissão")
+                            st.error(f"Falha na Reserva: {erro_msg}")
+                except Exception as e: st.error(f"Erro técnico: {e}")
