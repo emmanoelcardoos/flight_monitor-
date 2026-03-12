@@ -9,7 +9,7 @@ import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
 import stripe
 
-stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY", "chave_nao_configurada")
+stripe.api_key = st.secrets["STRIPE_SECRET_KEY"]
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
     try:
