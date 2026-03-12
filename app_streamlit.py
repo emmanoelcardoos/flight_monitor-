@@ -284,144 +284,142 @@ elif st.session_state.pagina == "reserva":
                 st.error("❌ Passaporte com validade inferior a 6 meses.")
                 bloqueio_emissao = True
 
-        if metodo == "Cartão de Crédito":
-            st.markdown("### 💳 Pagamento Seguro")
+    # 1. FECHE O FORMULÁRIO (Certifique-se que o 'with st.form' terminou antes)
+    # 2. O IF DO CARTÃO DEVE ESTAR ALINHADO À ESQUERDA (fora do form)
 
-            # 1. Geramos a Intenção (O Python avisa a Duffel que vai cobrar)
-            res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
+    # Este botão fecha o formulário 'form_final_v16' antes do pagamento
+        st.form_submit_button("1. Salvar Dados do Passageiro")
+
+    # --- FORA DO FORMULÁRIO ---
+    if metodo == "Cartão de Crédito":
+        st.markdown("### 💳 Pagamento Seguro")
+
+        # Geramos a Intenção
+        res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
+        
+        if "data" in res_intencao:
+            client_token = res_intencao["data"]["client_token"]
+            pit_id = res_intencao["data"]["id"]
             
-            if "data" in res_intencao:
-                client_token = res_intencao["data"]["client_token"]
-                
-                # 2. O Componente HTML com o Botão de Pagar
-                duffel_card_html = f"""
-                <script src="https://js.duffel.com/v2/duffel.js"></script>
-                <div id="card-element" style="margin-bottom: 15px;"></div>
-                <button id="pay-button" style="background-color: #007BFF; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">
-                    AUTORIZAR PAGAMENTO
-                </button>
-                <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
+            # Componente HTML
+            duffel_card_html = f"""
+            <script src="https://js.duffel.com/v2/duffel.js"></script>
+            <div id="card-element" style="margin-bottom: 15px;"></div>
+            <button id="pay-button" style="background-color: #007BFF; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">
+                AUTORIZAR PAGAMENTO
+            </button>
+            <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
 
-                <script>
-                    const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
-                    const cardElement = duffel.elements.create('card');
-                    cardElement.mount('#card-element');
+            <script>
+                const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
+                const cardElement = duffel.elements.create('card');
+                cardElement.mount('#card-element');
 
-                    const btn = document.getElementById('pay-button');
-                    btn.addEventListener('click', async () => {{
-                        btn.disabled = true;
-                        btn.innerText = "Processando...";
-                        document.getElementById('status-msg').innerText = "Consultando o banco...";
+                const btn = document.getElementById('pay-button');
+                btn.addEventListener('click', async () => {{
+                    btn.disabled = true;
+                    btn.innerText = "Processando...";
+                    document.getElementById('status-msg').innerText = "Consultando o banco...";
 
-                        // ESTA LINHA É A QUE FAZ O TELEMÓVEL APITAR
-                        const result = await duffel.confirmPaymentIntent("{client_token}", {{
-                            payment_method: {{ card: cardElement }}
-                        }});
-
-                        if (result.error) {{
-                            document.getElementById('status-msg').style.color = "red";
-                            document.getElementById('status-msg').innerText = result.error.message;
-                            btn.disabled = false;
-                            btn.innerText = "AUTORIZAR PAGAMENTO";
-                        }} else {{
-                            document.getElementById('status-msg').style.color = "green";
-                            document.getElementById('status-msg').innerText = "Sucesso! Pagamento aprovado.";
-                            btn.innerText = "PAGO";
-                        }}
+                    const result = await duffel.confirmPaymentIntent("{client_token}", {{
+                        payment_method: {{ card: cardElement }}
                     }});
-                </script>
-                <style>
-                    #card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}
-                </style>
-                """
-                import streamlit.components.v1 as components
-                components.html(duffel_card_html, height=250)
-            else:
-                st.error("Não foi possível iniciar o gateway de pagamento.")
 
-            # Parcelamento (Apenas visual, a Duffel processa o valor total)
+                    if (result.error) {{
+                        document.getElementById('status-msg').style.color = "red";
+                        document.getElementById('status-msg').innerText = result.error.message;
+                        btn.disabled = false;
+                        btn.innerText = "AUTORIZAR PAGAMENTO";
+                    }} else {{
+                        document.getElementById('status-msg').style.color = "green";
+                        document.getElementById('status-msg').innerText = "Sucesso! Pagamento aprovado.";
+                        btn.innerText = "PAGO";
+                    }}
+                }});
+            </script>
+            <style>
+                #card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}
+            </style>
+            """
+            components.html(duffel_card_html, height=200)
+
+            # Parcelamento (Apenas visual)
             if v['Moeda'] == "R$":
                 parcelas_list = [f"{i}x sem juros" for i in range(1, 11)] + ["11x com acréscimo", "12x com acréscimo"]
                 st.selectbox("Parcelamento", parcelas_list, key="card_install_v17")
-        # O BOTÃO DEVE ESTAR AQUI DENTRO DO WITH ST.FORM
-        btn_confirmar = st.form_submit_button("CONFIRMAR E EMITIR BILHETE")
-        if btn_confirmar:
-            if bloqueio_emissao:
-                st.error("Verifique os dados do passaporte.")
-            elif not nome or not email:
-                st.error("Preencha Nome e E-mail.")
-            else:
-                try:
-                    with st.spinner('Iniciando processo de pagamento seguro...'):
-                        api_token = st.secrets["DUFFEL_TOKEN"]
-                        headers = {
-                            "Authorization": f"Bearer {api_token}", 
-                            "Duffel-Version": "v2", 
-                            "Content-Type": "application/json"
-                        }
+        else:
+            st.error("Não foi possível iniciar o gateway de pagamento.")
+
+    # --- BOTÃO FINAL DE EMISSÃO ---
+    st.divider()
+    if st.button("2. CONFIRMAR E EMITIR BILHETE FINAL", type="primary", use_container_width=True):
+        if not nome or not email:
+            st.error("Por favor, preencha os dados do passageiro acima e clique em 'Salvar'.")
+        elif bloqueio_emissao:
+            st.error("Verifique os dados do passaporte.")
+        else:
+            try:
+                with st.spinner('Iniciando processo de emissão...'):
+                    api_token = st.secrets["DUFFEL_TOKEN"]
+                    headers = {
+                        "Authorization": f"Bearer {api_token}", 
+                        "Duffel-Version": "v2", 
+                        "Content-Type": "application/json"
+                    }
+                    
+                    # 1. Converte dados para a API
+                    gen_code = "m" if genero_pax == "Masculino" else "f"
+                    tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
+                    moeda_pg = "EUR"
+                    valor_exato_duffel = v.get("valor_bruto_duffel")
+
+                    # 2. PASSO NOVO: Criar a Intenção de Pagamento
+                    res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
+                    
+                    if "errors" in res_intencao:
+                        st.error(f"Erro na Intenção: {res_intencao['errors'][0]['message']}")
+                    else:
+                        pit_id = res_intencao["data"]["id"]
                         
-                        # 1. Converte dados para a API
-                        gen_code = "m" if genero_pax == "Masculino" else "f"
-                        tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
-                        moeda_pg = "EUR"
-                        valor_exato_duffel = v.get("valor_bruto_duffel")
-
-                        # 2. PASSO NOVO: Criar a Intenção de Pagamento (Payment Intent)
-                        # Isso avisa a Duffel que você vai cobrar o cliente
-                        res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
-                        
-                        if "errors" in res_intencao:
-                            st.error(f"Erro na Intenção: {res_intencao['errors'][0]['message']}")
-                        else:
-                            pit_id = res_intencao["data"]["id"]
-                            client_token = res_intencao["data"]["client_token"]
-                            
-                            st.info(f"✅ Intenção criada: {pit_id}")
-                            st.warning("⚠️ Agora o sistema aguarda a coleta dos dados do cartão via Front-end.")
-
-                            # IMPORTANTE: No Streamlit, para o banco ser consultado AGORA, 
-                            # você precisaria de um componente que use esse 'client_token'.
-                            # Como estamos testando, o próximo passo seria a confirmação.
-
-                            # 3. CRIAR O PEDIDO (Usando o saldo que será recarregado)
-                            payload = {
-                                "data": {
-                                    "type": "instant",
-                                    "selected_offers": [v['id_offer']],
-                                    "passengers": [{
-                                        "id": v['pax_ids'][0],
-                                        "title": tit_code,
-                                        "given_name": nome,
-                                        "family_name": apelido,
-                                        "gender": gen_code,
-                                        "born_on": str(dn),
-                                        "email": email,
-                                        "phone_number": "+351936797003"
-                                    }],
-                                    "payments": [{
-                                        "type": "balance",
-                                        "currency": "EUR",
-                                        "amount": valor_exato_duffel
-                                    }],
-                                    "metadata": {
-                                        "payment_intent_id": pit_id # Vincula o pagamento à ordem
-                                    }
+                        # 3. CRIAR O PEDIDO
+                        payload = {
+                            "data": {
+                                "type": "instant",
+                                "selected_offers": [v['id_offer']],
+                                "passengers": [{
+                                    "id": v['pax_ids'][0],
+                                    "title": tit_code,
+                                    "given_name": nome,
+                                    "family_name": apelido,
+                                    "gender": gen_code,
+                                    "born_on": str(dn),
+                                    "email": email,
+                                    "phone_number": "+351936797003"
+                                }],
+                                "payments": [{
+                                    "type": "balance",
+                                    "currency": "EUR",
+                                    "amount": valor_exato_duffel
+                                }],
+                                "metadata": {
+                                    "payment_intent_id": pit_id
                                 }
                             }
+                        }
 
-                            res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
+                        res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
-                            if res_ordem.status_code == 201:
-                                st.balloons()
-                                st.success(f"Bilhete Emitido! PNR: {res_ordem.json()['data']['booking_reference']}")
-                            else:
-                                erro_msg = res_ordem.json()['errors'][0]['message']
-                                st.error(f"❌ Erro na Emissão: {erro_msg}")
-                                if "insufficient_balance" in str(res_ordem.json()):
-                                    st.info("O pagamento ainda não foi confirmado no cartão do cliente.")
+                        if res_ordem.status_code == 201:
+                            st.balloons()
+                            st.success(f"Bilhete Emitido! PNR: {res_ordem.json()['data']['booking_reference']}")
+                        else:
+                            erro_msg = res_ordem.json()['errors'][0]['message']
+                            st.error(f"❌ Erro na Emissão: {erro_msg}")
+                            if "insufficient_balance" in str(res_ordem.json()):
+                                st.info("O pagamento ainda não foi confirmado no cartão do cliente.")
 
-                except Exception as ex:
-                    st.error(f"Falha técnica: {ex}")
+            except Exception as ex:
+                st.error(f"Falha técnica: {ex}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
