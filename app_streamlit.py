@@ -316,8 +316,9 @@ elif st.session_state.pagina == "reserva":
                             "Content-Type": "application/json"
                         }
 
-                        moeda_pagamento = "BRL" if v["Moeda"] == "R$" else "EUR"
-
+                        moeda_pagamento = "BRL" if "Real" in v["Moeda_Busca"] else "EUR"
+                        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], index=0)
+                        genero_codigo = "m" if genero_pax == "Masculino" else "f"
                         payload = {
                             "data": {
                                 "type": "instant",
@@ -326,13 +327,13 @@ elif st.session_state.pagina == "reserva":
                                     "id": v['pax_ids'][0],
                                     "given_name": nome,
                                     "family_name": apelido,
-                                    "gender": "m",
+                                    "gender": genero_codigo,
                                     "born_on": str(dn),
                                     "email": email,
                                     "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
                                 }],
                                 "payments": [{
-                                    "type": "payment_intent",
+                                    "type": "balance",
                                     "currency": moeda_pagamento,
                                     "amount": str(round(v['Preço'], 2))
                                 }]
