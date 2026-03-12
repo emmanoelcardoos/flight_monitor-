@@ -165,6 +165,7 @@ if st.session_state.pagina == "busca":
 
                         st.session_state.resultados_voos.append({
                             "id_offer": o["id"],
+                            "valor_bruto_duffel": o["total_amount"],
                             "pax_ids": [p["id"] for p in res.json()["data"]["passengers"]],
                             "Companhia": o["owner"]["name"],
                             "Preço": v_final,
@@ -314,7 +315,7 @@ elif st.session_state.pagina == "reserva":
                                 "payments": [{
                                     "type": "balance",
                                     "currency": moeda_pg,
-                                    "amount": f"{valor_original_eur:.2f}"
+                                    "amount": valor_exato_duffel
                                 }]
                             }
                         }
