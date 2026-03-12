@@ -2,12 +2,9 @@ import streamlit as st
 import requests
 import pandas as pd
 from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from streamlit_gsheets import GSheetsConnection
 
-# 1. Configuração da Página (Simples e Direta)
+# 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="centered")
 
 # --- FUNÇÕES DE LÓGICA ---
@@ -30,47 +27,42 @@ def guardar_alerta_planilha(dados):
         return True
     except: return False
 
-def gerar_link_reserva(companhia, origem, destino, data_ida, is_br):
+def gerar_info_reserva(companhia, origem, destino, data_ida, is_br):
     suffix = "com.br" if is_br else "pt"
-    data_formatada = data_ida.strftime("%Y-%m-%d")
+    data_sky = data_ida.strftime("%y%m%d")
     
     # Dicionário de links oficiais
     links_cia = {
         "TAP Air Portugal": f"https://www.flytap.com/{suffix}",
-        "Azul Brazilian Airlines": f"https://www.voeazul.com.br",
+        "Azul Brazilian Airlines": "https://www.voeazul.com.br",
         "LATAM Airlines": f"https://www.latamairlines.com/{suffix}",
-        "Gol Linhas Aéreas": f"https://www.voegol.com.br",
+        "Gol Linhas Aéreas": "https://www.voegol.com.br",
         "Lufthansa": f"https://www.lufthansa.com/{suffix}",
         "Air France": f"https://www.airfrance.{suffix}",
         "Iberia": f"https://www.iberia.com/{suffix}",
-        "British Airways": f"https://www.britishairways.com",
-        "Emirates": f"https://www.emirates.com"
+        "British Airways": "https://www.britishairways.com"
     }
     
-    # Se a CIA estiver na lista, manda para o site dela, senão, Skyscanner
     if companhia in links_cia:
-        return links_cia[companhia]
+        return links_cia[companhia], "✅ Site Oficial"
     else:
-        # Link do Skyscanner formatado
-        data_sky = data_ida.strftime("%y%m%d")
-        return f"https://www.skyscanner.{suffix}/transport/flights/{origem}/{destino}/{data_sky}"
+        return f"https://www.skyscanner.{suffix}/transport/flights/{origem}/{destino}/{data_sky}", "✈️ Ir para Skyscanner"
 
-# --- INTERFACE BÁSICA ---
+# --- INTERFACE ---
 st.title("✈️ Flight Monitor GDS")
-st.write("Buscador de voos e monitorização de preços.")
 
-# Dados
 cidades = {
-    "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Belo Horizonte (PLU)": "PLU", "Vitória (VIX)": "VIX"},
-    "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT", "Londrina (LDB)": "LDB"},
-    "Brasil - Centro-Oeste": {"Brasília (BSB)": "BSB", "Goiânia (GYN)": "GYN", "Cuiabá (CGB)": "CGB", "Campo Grande (CGR)": "CGR"},
-    "Brasil - Nordeste": {"Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT", "Maceió (MCZ)": "MCZ", "João Pessoa (JPA)": "JPA", "Aracaju (AJU)": "AJU", "Porto Seguro (BPS)": "BPS", "Ilhéus (IOS)": "IOS"},
-    "Brasil - Norte": {"Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Porto Velho (PVH)": "PVH", "Rio Branco (RBR)": "RBR", "Macapá (MCP)": "MCP", "Boa Vista (BVB)": "BVB", "Palmas (PMW)": "PMW", "Marabá (MAB)": "MAB", "Parauapebas / Carajás (CKS)": "CKS", "Araguaína (AUX)": "AUX"},
-    "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL"},
-    "Europa": {"Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Paris Orly (ORY)": "ORY", "Londres Heathrow (LHR)": "LHR", "Londres Gatwick (LGW)": "LGW", "Roma (FCO)": "FCO", "Milão (MXP)": "MXP", "Frankfurt (FRA)": "FRA", "Munique (MUC)": "MUC", "Zurique (ZRH)": "ZRH", "Amsterdã (AMS)": "AMS", "Bruxelas (BRU)": "BRU", "Copenhaga (CPH)": "CPH", "Istambul (IST)": "IST"},
-    "Estados Unidos": {"Miami (MIA)": "MIA", "Orlando (MCO)": "MCO", "Fort Lauderdale (FLL)": "FLL", "Nova York JFK (JFK)": "JFK", "Nova York Newark (EWR)": "EWR", "Atlanta (ATL)": "ATL", "Dallas (DFW)": "DFW", "Houston (IAH)": "IAH", "Chicago (ORD)": "ORD", "Los Angeles (LAX)": "LAX", "San Francisco (SFO)": "SFO", "Washington (IAD)": "IAD", "Boston (BOS)": "BOS"},
-    "África": {"Luanda (LAD)": "LAD", "Joanesburgo (JNB)": "JNB", "Cidade do Cabo (CPT)": "CPT", "Casablanca (CMN)": "CMN", "Addis Abeba (ADD)": "ADD"}
+    "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Vitória (VIX)": "VIX"},
+    "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU"},
+    "Brasil - Centro-Oeste": {"Brasília (BSB)": "BSB", "Goiânia (GYN)": "GYN", "Cuiabá (CGB)": "CGB"},
+    "Brasil - Nordeste": {"Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT", "Maceió (MCZ)": "MCZ"},
+    "Brasil - Norte": {"Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Porto Velho (PVH)": "PVH", "Marabá (MAB)": "MAB", "Macapá (MCP)": "MCP"},
+    "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Funchal (FNC)": "FNC"},
+    "Europa": {"Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Londres (LHR)": "LHR", "Roma (FCO)": "FCO", "Frankfurt (FRA)": "FRA", "Istambul (IST)": "IST"},
+    "Estados Unidos": {"Miami (MIA)": "MIA", "Orlando (MCO)": "MCO", "Nova York (JFK)": "JFK", "Boston (BOS)": "BOS"},
+    "África": {"Luanda (LAD)": "LAD", "Joanesburgo (JNB)": "JNB", "Casablanca (CMN)": "CMN"}
 }
+
 mapa_iata = {}
 opcoes = ["Selecione..."]
 for regiao, items in cidades.items():
@@ -78,46 +70,39 @@ for regiao, items in cidades.items():
         mapa_iata[nome] = iata
         opcoes.append(nome)
 
-# --- FORMULÁRIO DE BUSCA ---
 with st.form("busca_voos"):
-    tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
+    tipo_v = st.radio("Tipo", ["Ida e volta", "Somente ida"], horizontal=True)
+    c1, c2 = st.columns(2)
+    with c1: origem_sel = st.selectbox("Origem", opcoes)
+    with c2: destino_sel = st.selectbox("Destino", opcoes)
+    c3, c4 = st.columns(2)
+    with c3: data_ida = st.date_input("Partida", value=datetime.today())
+    with c4: data_volta = st.date_input("Regresso", value=datetime.today() + timedelta(days=7)) if tipo_v == "Ida e volta" else None
     
-    col1, col2 = st.columns(2)
-    with col1: origem_sel = st.selectbox("Origem", opcoes)
-    with col2: destino_sel = st.selectbox("Destino", opcoes)
-        
-    col3, col4 = st.columns(2)
-    with col3: data_ida = st.date_input("Data de Ida", value=datetime.today())
-    with col4:
-        data_volta = st.date_input("Data de Volta", value=datetime.today() + timedelta(days=7)) if tipo_v == "Ida e volta" else None
-
     st.write("Passageiros")
-    c_ad, c_cr, c_be = st.columns(3)
-    adultos = c_ad.number_input("Adultos", 1, 9, 1)
-    criancas = c_cr.number_input("Crianças", 0, 9, 0)
-    bebes = c_be.number_input("Bebés", 0, adultos, 0)
+    p1, p2, p3 = st.columns(3)
+    adultos = p1.number_input("Adultos", 1, 9, 1)
+    criancas = p2.number_input("Crianças", 0, 9, 0)
+    bebes = p3.number_input("Bebés", 0, adultos, 0)
 
-    moeda_pref = st.selectbox("Moeda de Preferência", ["Euro (€)", "Real (R$)"])
+    moeda_pref = st.selectbox("Moeda", ["Euro (€)", "Real (R$)"])
     btn_pesquisar = st.form_submit_button("PESQUISAR VOOS")
 
-# --- LÓGICA DE EXECUÇÃO ---
 if btn_pesquisar:
     if "Selecione" in origem_sel or "Selecione" in destino_sel:
-        st.error("Por favor, selecione origem e destino.")
+        st.error("Selecione origem e destino.")
     else:
         try:
-            with st.spinner('A pesquisar ofertas...'):
+            with st.spinner('A verificar preços reais...'):
                 api_token = st.secrets.get("DUFFEL_TOKEN")
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 is_br = "Real" in moeda_pref
-                cotacao = get_exchange_rate()
                 
                 pax_list = [{"type": "adult"}] * adultos + [{"type": "child"}] * criancas + [{"type": "infant"}] * bebes
                 iata_origem, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
                 
                 slices = [{"origin": iata_origem, "destination": iata_dest, "departure_date": str(data_ida)}]
-                if data_volta:
-                    slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
+                if data_volta: slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
 
                 payload = {"data": {"slices": slices, "passengers": pax_list, "requested_currencies": ["BRL" if is_br else "EUR"]}}
                 res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
@@ -126,49 +111,36 @@ if btn_pesquisar:
                     offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
                     if offers:
                         resultados = []
-                        for o in offers[:5]: # Mostra as 5 melhores ofertas
+                        for o in offers[:5]:
                             cia_nome = o["owner"]["name"]
-                            link_final = gerar_link_reserva(cia_nome, iata_origem, iata_dest, data_ida, is_br)
-                            
+                            link, label = gerar_info_reserva(cia_nome, iata_origem, iata_dest, data_ida, is_br)
                             resultados.append({
                                 "Companhia": cia_nome,
                                 "Preço": float(o["total_amount"]),
                                 "Símbolo": "R$" if is_br else "€",
-                                "Link": link_final
+                                "Link": link,
+                                "Botão": label
                             })
-                        
                         st.session_state.voos = resultados
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
-                        st.success("Voos encontrados!")
-                    else:
-                        st.warning("Nenhum voo encontrado para esta data.")
-        except Exception as e:
-            st.error(f"Erro na pesquisa: {e}")
+                    else: st.warning("Sem voos para esta data.")
+        except Exception as e: st.error(f"Erro: {e}")
 
-# --- RESULTADOS ---
 if "voos" in st.session_state:
     st.divider()
-    st.subheader("Melhores Ofertas Encontradas")
+    st.subheader("Resultados")
     df = pd.DataFrame(st.session_state.voos)
     simb = st.session_state.voos[0]["Símbolo"]
     
     st.dataframe(df, column_config={
         "Preço": st.column_config.NumberColumn("Preço", format=f"{simb} %.2f"),
-        "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
+        "Link": st.column_config.LinkColumn("Reserva", display_text=r"(.+)"), # Pega o texto do campo 'Botão'
+        "Botão": None # Esconde a coluna Botão original
     }, use_container_width=True, hide_index=True)
 
-    with st.expander("🔔 Ativar Alerta de Preço"):
+    with st.expander("🔔 Monitorar este Preço"):
         email = st.text_input("Teu E-mail")
-        if st.button("Guardar Alerta"):
+        if st.button("Ativar Alerta"):
             if "@" in email:
-                dados = {
-                    "email": email, "itinerario": st.session_state.itinerario,
-                    "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel],
-                    "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "",
-                    "adultos": adultos, "criancas": criancas, "bebes": bebes,
-                    "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": simb
-                }
-                if guardar_alerta_planilha(dados):
-                    st.success("Alerta guardado com sucesso!")
-            else:
-                st.error("E-mail inválido.")
+                dados = {"email": email, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": simb}
+                if guardar_alerta_planilha(dados): st.success("Alerta guardado!")
