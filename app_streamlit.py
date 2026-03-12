@@ -10,7 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 # 1. Configuração da Página (Simples e Direta)
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="centered")
 
-# --- FUNÇÕES DE LÓGICA (SEM ALTERAÇÕES) ---
+# --- FUNÇÕES DE LÓGICA ---
 def get_exchange_rate():
     try:
         res = requests.get("https://open.er-api.com/v6/latest/EUR")
@@ -30,15 +30,46 @@ def guardar_alerta_planilha(dados):
         return True
     except: return False
 
-# --- INTERFACE BÁSICA (PRETO NATIVO) ---
+def gerar_link_reserva(companhia, origem, destino, data_ida, is_br):
+    suffix = "com.br" if is_br else "pt"
+    data_formatada = data_ida.strftime("%Y-%m-%d")
+    
+    # Dicionário de links oficiais
+    links_cia = {
+        "TAP Air Portugal": f"https://www.flytap.com/{suffix}",
+        "Azul Brazilian Airlines": f"https://www.voeazul.com.br",
+        "LATAM Airlines": f"https://www.latamairlines.com/{suffix}",
+        "Gol Linhas Aéreas": f"https://www.voegol.com.br",
+        "Lufthansa": f"https://www.lufthansa.com/{suffix}",
+        "Air France": f"https://www.airfrance.{suffix}",
+        "Iberia": f"https://www.iberia.com/{suffix}",
+        "British Airways": f"https://www.britishairways.com",
+        "Emirates": f"https://www.emirates.com"
+    }
+    
+    # Se a CIA estiver na lista, manda para o site dela, senão, Skyscanner
+    if companhia in links_cia:
+        return links_cia[companhia]
+    else:
+        # Link do Skyscanner formatado
+        data_sky = data_ida.strftime("%y%m%d")
+        return f"https://www.skyscanner.{suffix}/transport/flights/{origem}/{destino}/{data_sky}"
+
+# --- INTERFACE BÁSICA ---
 st.title("✈️ Flight Monitor GDS")
 st.write("Buscador de voos e monitorização de preços.")
 
 # Dados
 cidades = {
-    "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO"},
-    "Brasil": {"São Paulo (GRU)": "GRU", "Rio de Janeiro (GIG)": "GIG"},
-    "Mundo": {"Madrid (MAD)": "MAD", "Paris (CDG)": "CDG", "Miami (MIA)": "MIA"}
+    "Brasil - Sudeste": {"São Paulo (GRU)": "GRU", "São Paulo (CGH)": "CGH", "Campinas (VCP)": "VCP", "Rio de Janeiro (GIG)": "GIG", "Rio de Janeiro (SDU)": "SDU", "Belo Horizonte (CNF)": "CNF", "Belo Horizonte (PLU)": "PLU", "Vitória (VIX)": "VIX"},
+    "Brasil - Sul": {"Curitiba (CWB)": "CWB", "Florianópolis (FLN)": "FLN", "Porto Alegre (POA)": "POA", "Foz do Iguaçu (IGU)": "IGU", "Navegantes (NVT)": "NVT", "Londrina (LDB)": "LDB"},
+    "Brasil - Centro-Oeste": {"Brasília (BSB)": "BSB", "Goiânia (GYN)": "GYN", "Cuiabá (CGB)": "CGB", "Campo Grande (CGR)": "CGR"},
+    "Brasil - Nordeste": {"Salvador (SSA)": "SSA", "Recife (REC)": "REC", "Fortaleza (FOR)": "FOR", "Natal (NAT)": "NAT", "Maceió (MCZ)": "MCZ", "João Pessoa (JPA)": "JPA", "Aracaju (AJU)": "AJU", "Porto Seguro (BPS)": "BPS", "Ilhéus (IOS)": "IOS"},
+    "Brasil - Norte": {"Manaus (MAO)": "MAO", "Belém (BEL)": "BEL", "Porto Velho (PVH)": "PVH", "Rio Branco (RBR)": "RBR", "Macapá (MCP)": "MCP", "Boa Vista (BVB)": "BVB", "Palmas (PMW)": "PMW", "Marabá (MAB)": "MAB", "Parauapebas / Carajás (CKS)": "CKS", "Araguaína (AUX)": "AUX"},
+    "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO", "Funchal (FNC)": "FNC", "Ponta Delgada (PDL)": "PDL"},
+    "Europa": {"Madrid (MAD)": "MAD", "Barcelona (BCN)": "BCN", "Paris (CDG)": "CDG", "Paris Orly (ORY)": "ORY", "Londres Heathrow (LHR)": "LHR", "Londres Gatwick (LGW)": "LGW", "Roma (FCO)": "FCO", "Milão (MXP)": "MXP", "Frankfurt (FRA)": "FRA", "Munique (MUC)": "MUC", "Zurique (ZRH)": "ZRH", "Amsterdã (AMS)": "AMS", "Bruxelas (BRU)": "BRU", "Copenhaga (CPH)": "CPH", "Istambul (IST)": "IST"},
+    "Estados Unidos": {"Miami (MIA)": "MIA", "Orlando (MCO)": "MCO", "Fort Lauderdale (FLL)": "FLL", "Nova York JFK (JFK)": "JFK", "Nova York Newark (EWR)": "EWR", "Atlanta (ATL)": "ATL", "Dallas (DFW)": "DFW", "Houston (IAH)": "IAH", "Chicago (ORD)": "ORD", "Los Angeles (LAX)": "LAX", "San Francisco (SFO)": "SFO", "Washington (IAD)": "IAD", "Boston (BOS)": "BOS"},
+    "África": {"Luanda (LAD)": "LAD", "Joanesburgo (JNB)": "JNB", "Cidade do Cabo (CPT)": "CPT", "Casablanca (CMN)": "CMN", "Addis Abeba (ADD)": "ADD"}
 }
 mapa_iata = {}
 opcoes = ["Selecione..."]
@@ -52,14 +83,11 @@ with st.form("busca_voos"):
     tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
     
     col1, col2 = st.columns(2)
-    with col1:
-        origem_sel = st.selectbox("Origem", opcoes)
-    with col2:
-        destino_sel = st.selectbox("Destino", opcoes)
+    with col1: origem_sel = st.selectbox("Origem", opcoes)
+    with col2: destino_sel = st.selectbox("Destino", opcoes)
         
     col3, col4 = st.columns(2)
-    with col3:
-        data_ida = st.date_input("Data de Ida", value=datetime.today())
+    with col3: data_ida = st.date_input("Data de Ida", value=datetime.today())
     with col4:
         data_volta = st.date_input("Data de Volta", value=datetime.today() + timedelta(days=7)) if tipo_v == "Ida e volta" else None
 
@@ -70,7 +98,6 @@ with st.form("busca_voos"):
     bebes = c_be.number_input("Bebés", 0, adultos, 0)
 
     moeda_pref = st.selectbox("Moeda de Preferência", ["Euro (€)", "Real (R$)"])
-    
     btn_pesquisar = st.form_submit_button("PESQUISAR VOOS")
 
 # --- LÓGICA DE EXECUÇÃO ---
@@ -98,13 +125,19 @@ if btn_pesquisar:
                 if res.status_code == 201:
                     offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
                     if offers:
-                        o = offers[0]
-                        st.session_state.voos = [{
-                            "Companhia": o["owner"]["name"],
-                            "Preço": float(o["total_amount"]),
-                            "Símbolo": "R$" if is_br else "€",
-                            "Link": f"https://www.skyscanner.pt/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}"
-                        }]
+                        resultados = []
+                        for o in offers[:5]: # Mostra as 5 melhores ofertas
+                            cia_nome = o["owner"]["name"]
+                            link_final = gerar_link_reserva(cia_nome, iata_origem, iata_dest, data_ida, is_br)
+                            
+                            resultados.append({
+                                "Companhia": cia_nome,
+                                "Preço": float(o["total_amount"]),
+                                "Símbolo": "R$" if is_br else "€",
+                                "Link": link_final
+                            })
+                        
+                        st.session_state.voos = resultados
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
                         st.success("Voos encontrados!")
                     else:
@@ -115,16 +148,15 @@ if btn_pesquisar:
 # --- RESULTADOS ---
 if "voos" in st.session_state:
     st.divider()
-    st.subheader("Melhor Oferta")
+    st.subheader("Melhores Ofertas Encontradas")
     df = pd.DataFrame(st.session_state.voos)
     simb = st.session_state.voos[0]["Símbolo"]
     
     st.dataframe(df, column_config={
         "Preço": st.column_config.NumberColumn("Preço", format=f"{simb} %.2f"),
-        "Link": st.column_config.LinkColumn("Reservar", display_text="Abrir Skyscanner ✈️")
+        "Link": st.column_config.LinkColumn("Reservar", display_text="Ver Oferta ✈️")
     }, use_container_width=True, hide_index=True)
 
-    # Alerta
     with st.expander("🔔 Ativar Alerta de Preço"):
         email = st.text_input("Teu E-mail")
         if st.button("Guardar Alerta"):
