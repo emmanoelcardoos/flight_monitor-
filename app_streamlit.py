@@ -16,7 +16,7 @@ if 'resultados_voos' not in st.session_state:
 
 # --- PÁGINA DE BUSCA ---
 if st.session_state.pagina == "busca":
-    st.title("✈️ Reserva Direta GDS")
+    st.title("✈️ Fligh Monitor - GDS")
     
     # MANTENDO A TUA LISTA DE CIDADES COMPLETA
     cidades = {
