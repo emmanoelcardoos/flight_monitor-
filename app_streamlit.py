@@ -507,15 +507,41 @@ elif st.session_state.pagina == "reserva":
             except Exception as e:
                 st.error(f"Erro técnico na emissão: {e}")
 
-# --- PÁGINA 3: LOGIN ---
+# --- PÁGINA 3: LOGIN (ADMIN / EMISSÃO MANUAL) ---
 elif st.session_state.pagina == "login":
-
-    st.title("🔑 Área do Cliente")
+    st.title("✈️ Área do Passageiro")
+    st.subheader("Gerencie sua viagem")
 
     with st.container(border=True):
+        email_login = st.text_input("E-mail utilizado na compra")
+        pnr_login = st.text_input("Código de Reserva (PNR)")
+        
+        if st.button("Aceder à Minha Reserva"):
+            # Aqui faremos a busca no Google Sheets futuramente
+            # Por enquanto, simulamos encontrar a reserva
+            if email_login and pnr_login:
+                st.session_state.reserva_ativa = True
+                st.success("Reserva localizada!")
+            else:
+                st.error("Dados não encontrados. Verifique seu e-mail e PNR.")
 
-        st.text_input("PNR")
-        st.text_input("E-mail")
-
-        if st.button("Consultar"):
-            st.success("Localizando reserva...")
+    if st.session_state.get("reserva_ativa"):
+        st.divider()
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 📋 Seus Dados")
+            st.info(f"**Passageiro:** {st.session_state.get('pax_nome', 'Usuário')}")
+            if st.button("✏️ Alterar Dados Pessoais"):
+                st.info("Funcionalidade em desenvolvimento: Abrirá formulário de edição.")
+        
+        with col2:
+            st.markdown("### ✈️ Gestão do Voo")
+            # Exemplo de link para o PDF (que você gerará ou salvará o link do Sheets)
+            st.link_button("📄 Baixar Itinerário (PDF)", "https://seusite.com/pdf_exemplo")
+            
+            if st.button("🔄 Solicitar Alteração de Voo"):
+                st.warning("O pedido de alteração será enviado à nossa central.")
+                
+            if st.button("❌ Cancelar Reserva", type="secondary"):
+                st.error("Atenção: Cancelamentos estão sujeitos a taxas da companhia aérea.")
