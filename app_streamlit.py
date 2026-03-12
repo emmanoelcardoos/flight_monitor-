@@ -10,7 +10,7 @@ from streamlit_gsheets import GSheetsConnection
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# --- ESTILO CSS: APPLE GLASSMORPHISM REFINADO ---
+# --- ESTILO CSS DEFINITIVO E CORRIGIDO ---
 st.markdown("""
     <style>
     /* 1. Fundo com Imagem */
@@ -19,76 +19,101 @@ st.markdown("""
         background-size: cover;
     }
 
-    /* 2. Card de Vidro Líquido (Glassmorphism) */
+    /* 2. Card de Vidro Principal */
     [data-testid="stVerticalBlock"] > div:has(div.stButton) {
-        background: rgba(255, 255, 255, 0.22) !important;
+        background: rgba(255, 255, 255, 0.15) !important;
         backdrop-filter: blur(25px) !important;
         -webkit-backdrop-filter: blur(25px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
         border-radius: 20px !important;
-        padding: 35px !important;
-        box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2) !important;
+        padding: 40px !important;
         max-width: 1100px !important;
         margin: auto !important;
-        margin-top: 40px !important;
+        margin-top: 50px !important;
     }
 
-    /* 3. Inputs Unificados (Brancos/Translúcidos - Sem Preto) */
+    /* 3. INPUTS CLAROS (Origem, Destino, Passageiros, Datas) */
+    /* Removemos o preto de todos os componentes */
     div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, .stNumberInput div, div[data-testid="stPopover"] > button {
-        background-color: rgba(255, 255, 255, 0.7) !important;
+        background-color: rgba(255, 255, 255, 0.8) !important;
         border: none !important;
         border-radius: 10px !important;
         color: #334155 !important;
-        height: 44px !important;
+        height: 45px !important;
     }
 
-    /* Tipografia Suave (Grafite) */
+    /* Corrigir cor do texto nos dropdowns e inputs */
     input, select, span, p, label {
         color: #334155 !important;
         font-weight: 500 !important;
     }
-    
-    label p { font-size: 0.9rem !important; margin-bottom: 2px !important; }
 
-    /* 4. Botão de Pesquisa Compacto (Sem camadas extras) */
+    /* 4. BOTÃO DE BUSCA LIMPO E ALINHADO */
+    /* Removemos fundos extras e alinhamos à direita */
     div.stButton > button {
         background: #0071e3 !important;
         color: white !important;
         border-radius: 10px !important;
-        height: 44px !important;
+        height: 45px !important;
         width: 100% !important;
         border: none !important;
         font-weight: 600 !important;
         font-size: 15px !important;
-        margin-top: 25px !important;
+        margin-top: 25px !important; /* Alinhamento com o label das datas */
         box-shadow: none !important;
     }
     div.stButton > button:hover {
         background: #0077ed !important;
-        transform: translateY(-1px);
     }
 
-    /* 5. Seletor de Moeda Subtil no Canto */
-    .currency-trigger {
-        position: absolute;
+    /* 5. MOEDA DISCRETA NO CANTO SUPERIOR DIREITO */
+    .currency-container {
+        position: fixed;
         top: 20px;
         right: 40px;
-        z-index: 1000;
+        z-index: 9999;
     }
-    .currency-trigger button {
-        background: rgba(255,255,255,0.3) !important;
-        border: 1px solid rgba(255,255,255,0.4) !important;
+    .currency-container button {
+        background: rgba(255, 255, 255, 0.2) !important;
+        border: 1px solid rgba(255, 255, 255, 0.4) !important;
         color: white !important;
         border-radius: 50% !important;
-        width: 40px !important;
-        height: 40px !important;
+        width: 45px !important;
+        height: 45px !important;
+        font-weight: bold !important;
+        backdrop-filter: blur(10px);
+    }
+
+    /* 6. TÍTULO GRANDE E MODERNO */
+    .main-title {
+        font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+        font-size: 4rem;
+        font-weight: 800;
+        text-align: center;
+        color: white;
+        text-shadow: 0 4px 15px rgba(0,0,0,0.4);
+        margin-bottom: 0px;
     }
 
     header, footer, #MainMenu {visibility: hidden;}
     </style>
     """, unsafe_allow_html=True)
 
-# --- FUNÇÕES DE LÓGICA ---
+# --- MOEDA NO CANTO SUPERIOR DIREITO ---
+if 'moeda_simbolo' not in st.session_state:
+    st.session_state.moeda_simbolo = "€"
+
+st.markdown('<div class="currency-container">', unsafe_allow_html=True)
+if st.button(st.session_state.moeda_simbolo, key="curr_btn"):
+    st.session_state.moeda_simbolo = "R$" if st.session_state.moeda_simbolo == "€" else "€"
+    st.rerun()
+st.markdown('</div>', unsafe_allow_html=True)
+
+# --- TÍTULO ---
+st.markdown('<h1 class="main-title">Flight Monitor</h1>', unsafe_allow_html=True)
+st.markdown('<p style="text-align:center; color:white; opacity:0.8; margin-top:-10px;">Encontre e monitorize os seus voos em tempo real</p>', unsafe_allow_html=True)
+
+# --- FUNÇÕES ---
 def get_exchange_rate():
     try:
         res = requests.get("https://open.er-api.com/v6/latest/EUR")
@@ -99,10 +124,8 @@ def guardar_alerta_planilha(dados):
     try:
         conn = st.connection("gsheets", type=GSheetsConnection)
         colunas_certas = ["email", "itinerario", "origem", "destino", "data", "data_volta", "adultos", "criancas", "bebes", "preco_inicial", "moeda"]
-        try:
-            df_atual = conn.read(worksheet="Página1", ttl=0)
-            df_atual = df_atual.reindex(columns=colunas_certas) if not df_atual.empty else pd.DataFrame(columns=colunas_certas)
-        except: df_atual = pd.DataFrame(columns=colunas_certas)
+        df_atual = conn.read(worksheet="Página1", ttl=0)
+        df_atual = df_atual.reindex(columns=colunas_certas) if not df_atual.empty else pd.DataFrame(columns=colunas_certas)
         novo_dado = pd.DataFrame([dados]).reindex(columns=colunas_certas)
         df_final = pd.concat([df_atual, novo_dado], ignore_index=True)
         conn.update(worksheet="Página1", data=df_final)
@@ -110,20 +133,7 @@ def guardar_alerta_planilha(dados):
         return True
     except: return False
 
-# --- GESTÃO DE MOEDA (SÍMBOLO DISCRETO) ---
-if 'moeda_simbolo' not in st.session_state:
-    st.session_state.moeda_simbolo = "€"
-
-st.markdown('<div class="currency-trigger">', unsafe_allow_html=True)
-if st.button(st.session_state.moeda_simbolo):
-    st.session_state.moeda_simbolo = "R$" if st.session_state.moeda_simbolo == "€" else "€"
-    st.rerun()
-st.markdown('</div>', unsafe_allow_html=True)
-
-# --- HEADER ---
-st.markdown('<h1 style="text-align: center; color: white; text-shadow: 0 4px 10px rgba(0,0,0,0.3); margin-top: -20px;">Flight Monitor</h1>', unsafe_allow_html=True)
-
-# --- BASE DE DADOS DE CIDADES (REDUZIDA PARA O EXEMPLO) ---
+# --- DADOS ---
 cidades = {
     "Portugal": {"Lisboa (LIS)": "LIS", "Porto (OPO)": "OPO"},
     "Brasil": {"São Paulo (GRU)": "GRU", "Rio de Janeiro (GIG)": "GIG", "Brasília (BSB)": "BSB"},
@@ -140,14 +150,14 @@ for regiao, items in cidades.items():
 
 # --- CARD DE BUSCA REORGANIZADO ---
 with st.container():
-    tipo_v = st.radio("Tipo", ["Ida e volta", "Somente ida"], horizontal=True, label_visibility="collapsed")
+    tipo_v = st.radio("Configuração", ["Ida e volta", "Somente ida"], horizontal=True, label_visibility="collapsed")
     
-    # PRIMEIRA LINHA: De, Para e Passageiros
+    # LINHA 1: DE, PARA, PASSAGEIROS (Cores Claras)
     col_de, col_para, col_pax = st.columns([8, 8, 4])
     with col_de:
-        origem_sel = st.selectbox("Origem", opcoes_origem, label_visibility="collapsed")
+        origem_sel = st.selectbox("De", opcoes_origem)
     with col_para:
-        destino_sel = st.selectbox("Destino", opcoes_destino, label_visibility="collapsed")
+        destino_sel = st.selectbox("Para", opcoes_destino)
     with col_pax:
         pax_pop = st.popover("👤 Passageiros")
         with pax_pop:
@@ -155,7 +165,7 @@ with st.container():
             criancas = st.number_input("Crianças", 0, 9, 0)
             bebes = st.number_input("Bebés", 0, adultos, 0)
 
-    # SEGUNDA LINHA: Datas e Botão
+    # LINHA 2: DATAS E BOTÃO DE BUSCA (Alinhados)
     col_ida, col_volta, col_busca = st.columns([5, 5, 4])
     with col_ida:
         data_ida = st.date_input("Ida", value=datetime.today())
@@ -166,6 +176,7 @@ with st.container():
             st.text_input("Volta", value="---", disabled=True)
             data_volta = None
     with col_busca:
+        # Botão agora alinhado sem containers extras
         btn_pesquisar = st.button("BUSCAR VOOS")
 
 # --- LÓGICA DE BUSCA ---
@@ -179,10 +190,8 @@ if btn_pesquisar:
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 is_br = st.session_state.moeda_simbolo == "R$"
                 cotacao = get_exchange_rate()
-                
                 pax_list = [{"type": "adult"}] * adultos + [{"type": "child"}] * criancas + [{"type": "infant"}] * bebes
                 iata_origem, iata_dest = mapa_iata[origem_sel], mapa_iata[destino_sel]
-                
                 slices = [{"origin": iata_origem, "destination": iata_dest, "departure_date": str(data_ida)}]
                 if data_volta: slices.append({"origin": iata_dest, "destination": iata_origem, "departure_date": str(data_volta)})
 
@@ -201,7 +210,7 @@ if btn_pesquisar:
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
         except Exception as e: st.error(f"Erro: {e}")
 
-# --- RESULTADOS E ALERTA (DENTRO DO VIDRO) ---
+# --- RESULTADOS ---
 if "voos" in st.session_state:
     st.markdown("<br>", unsafe_allow_html=True)
     with st.container():
@@ -218,12 +227,6 @@ if "voos" in st.session_state:
         email_user = st.text_input("E-mail para vigilância:", placeholder="teu@email.com")
         if st.button("ATIVAR ALERTA"):
             if "@" in email_user:
-                dados = {
-                    "email": email_user, "itinerario": st.session_state.itinerario,
-                    "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel],
-                    "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "",
-                    "adultos": adultos, "criancas": criancas, "bebes": bebes,
-                    "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.moeda_simbolo
-                }
+                dados = {"email": email_user, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.moeda_simbolo}
                 if guardar_alerta_planilha(dados): st.success("Alerta ativado com sucesso!")
         st.markdown("</div>", unsafe_allow_html=True)
