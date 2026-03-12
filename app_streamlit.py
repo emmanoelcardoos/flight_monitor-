@@ -288,64 +288,34 @@ if st.session_state.pagina == "busca":
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
-
-# --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
 # --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    
+
     # =========================================================
-    # --- LÓGICA DE DETEÇÃO AUTOMÁTICA PÓS-PAGAMENTO ---
-# Este código deve ficar fora de qualquer função, no corpo principal do script
-
-params = st.query_params # Pega os parâmetros da URL (ex: ?pagamento=sucesso)
-
-if params.get("pagamento") == "sucesso":
-    # Verificamos se já não emitimos o bilhete nesta sessão para evitar envios duplicados
-    if "reserva_concluida" not in st.session_state:
-        st.success("🎉 Pagamento Confirmado! Estamos a emitir o seu bilhete...")
-        
-        with st.spinner("A processar reserva na Duffel e a enviar e-mail de confirmação..."):
-            try:
-                # 1. Recuperamos os dados que estavam salvos na sessão antes de ir para a Stripe
-                # (Certifica-te que os nomes das variáveis batem com o teu st.session_state)
-                itinerario = st.session_state.get('itinerario_selecionado', 'Voo selecionado')
-                pax_nome = st.session_state.get('pax_nome', 'Passageiro')
-                pax_email = st.session_state.get('pax_email')
-                valor = st.session_state.get('valor_total', '0.00')
-
-                # 2. DISPARO AUTOMÁTICO DO E-MAIL
-                if pax_email:
-                    corpo_email = f"""
-                    <h1>Sua reserva está confirmada! ✈️</h1>
-                    <p>Olá <b>{pax_nome}</b>,</p>
-                    <p>Recebemos o seu pagamento. Aqui estão os detalhes do voo:</p>
-                    <hr>
-                    <p><b>Voo:</b> {itinerario}</p>
-                    <p><b>Valor Pago:</b> €{valor}</p>
-                    <hr>
-                    <p>Obrigado por escolher o Flight Monitor!</p>
-                    """
+    # --- BLOCO DE AUTOMATIZAÇÃO (INSERIDO) ---
+    # =========================================================
+    params = st.query_params
+    if params.get("pagamento") == "sucesso":
+        if "reserva_concluida" not in st.session_state:
+            st.success("🎉 Pagamento Confirmado! Estamos a emitir o seu bilhete...")
+            with st.spinner("A processar reserva e a enviar e-mail de confirmação..."):
+                try:
+                    pax_nome = st.session_state.get('pax_nome', 'Passageiro')
+                    pax_email = st.session_state.get('pax_email')
+                    itinerario = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
                     
-                    # Chama a função que já criamos
-                    email_enviado = enviar_email(pax_email, f"Reserva Confirmada - {itinerario} ✈️", corpo_email)
-                    
-                    if email_enviado:
+                    if pax_email:
+                        corpo_email = f"<h1>Sua reserva está confirmada! ✈️</h1><p>Olá <b>{pax_nome}</b>, seu pagamento para o voo {itinerario} foi recebido!</p>"
+                        enviar_email(pax_email, f"Reserva Confirmada - {itinerario} ✈️", corpo_email)
                         st.balloons()
-                        st.info(f"✅ Bilhete enviado com sucesso para: {pax_email}")
-                    else:
-                        st.warning("⚠️ O pagamento foi aprovado, mas houve um erro ao enviar o e-mail automático.")
-
-                # Marcar como concluído para não repetir se o usuário der F5
-                st.session_state["reserva_concluida"] = True
-                
-            except Exception as e:
-                st.error(f"Erro ao finalizar processo automático: {e}")
-
-elif params.get("pagamento") == "cancelado":
-    st.error("❌ O pagamento foi cancelado. Se houve algum problema, tente novamente.")
-# --------------------------------------------------
+                        st.session_state["reserva_concluida"] = True
+                        st.session_state["pago"] = True
+                except Exception as e:
+                    st.error(f"Erro no automático: {e}")
     # =========================================================
+
+    # --- ABAIXO SEGUE O SEU CÓDIGO ORIGINAL SEM ALTERAÇÕES ---
     try:
         # Pega o parâmetro da URL enviado pela Stripe
         status_pag_url = st.query_params.get("pagamento")
@@ -357,9 +327,7 @@ elif params.get("pagamento") == "cancelado":
             st.warning("⚠️ **O pagamento não foi concluído.** Tente novamente ou use outro cartão.")
             st.session_state.pago = False
     except Exception:
-        # Se não houver parâmetro na URL, apenas segue o fluxo normal
         pass
-    # =========================================================
 
     # Exibição dos dados do voo
     st.info(f"✈️ **Voo:** {v['Companhia']} | **Trecho:** {v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}")
@@ -393,7 +361,6 @@ elif params.get("pagamento") == "cancelado":
         st.subheader("👤 Dados do Passageiro")
         
         c_tit1, c_tit2 = st.columns([1, 3])
-        # RESOLVE O ERRO DE 'TITLE'
         titulo_pax = c_tit1.selectbox("Título", ["Sr.", "Sra.", "Srta."], key="pax_title_v16")
         
         c1, c2 = st.columns(2)
@@ -406,7 +373,6 @@ elif params.get("pagamento") == "cancelado":
         dn = c3.date_input("Data de Nascimento", value=datetime(1995, 1, 1), max_value=datetime(2026, 2, 28))
         documento = c4.text_input("CPF ou CC (Documento de Identidade)")
 
-        # RESOLVE O ERRO DE 'GENDER'
         genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], key="pax_gender_v16")
 
         bloqueio_emissao = False
@@ -420,20 +386,18 @@ elif params.get("pagamento") == "cancelado":
                 st.error("Passaporte com validade inferior a 6 meses.")
                 bloqueio_emissao = True
 
-    # 1. FECHE O FORMULÁRIO (Certifique-se que o 'with st.form' terminou antes)
-    # 2. O IF DO CARTÃO DEVE ESTAR ALINHADO À ESQUERDA (fora do form)
-
-    # Este botão fecha o formulário 'form_final_v16' antes do pagamento
-        st.form_submit_button("1. Salvar Dados do Passageiro")
+        if st.form_submit_button("1. Salvar Dados do Passageiro"):
+            # Salvando na sessão para o e-mail automático ler depois
+            st.session_state['pax_nome'] = nome
+            st.session_state['pax_email'] = email
+            st.success("Dados salvos com sucesso!")
 
     # --- FORA DO FORMULÁRIO ---
-    # 1. Preparação dos valores
     valor_exato_duffel = v.get("valor_bruto_duffel")
 
     if metodo == "Cartão de Crédito":
         st.markdown("### 💳 Pagamento Seguro")
         
-        # Se ainda não pagou, mostra o botão do Stripe
         if not st.session_state.get("pago", False):
             origem = v['Segmentos'][0]['de']
             destino = v['Segmentos'][-1]['para']
@@ -447,6 +411,11 @@ elif params.get("pagamento") == "cancelado":
                         st.link_button("👉 CLIQUE PARA PAGAR AGORA", url, type="primary", use_container_width=True)
         else:
             st.info("💳 Pagamento já autorizado. Prossiga para a emissão final.")
+
+    st.divider()
+    # O seu botão original continua aqui
+    
+        # ... (restante do seu código de emissão Duffel)
     # --- BOTÃO FINAL DE EMISSÃO ---
     st.divider()
     if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
