@@ -300,7 +300,7 @@ elif st.session_state.pagina == "reserva":
             st.info("💠 Pagamento via PIX: Link de suporte abaixo.")
             st.markdown(f"[💬 Chamar no WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
 
-                if st.form_submit_button("CONFIRMAR E EMITIR BILHETE"):
+        if st.form_submit_button("CONFIRMAR E EMITIR BILHETE"):
             if bloqueio_emissao:
                 st.error("Não é possível prosseguir: Verifique a validade do seu passaporte.")
             elif not nome or not email or not documento:
