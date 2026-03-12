@@ -295,6 +295,7 @@ elif st.session_state.pagina == "reserva":
                         gen_code = "m" if genero_pax == "Masculino" else "f"
                         tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
                         moeda_pg = "EUR"
+                        valor_original_eur = v['Preço'] / (1 + COMISSAO_PERCENTUAL)
 
                         payload = {
                             "data": {
