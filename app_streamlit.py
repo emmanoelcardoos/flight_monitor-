@@ -8,7 +8,8 @@ from email.mime.multipart import MIMEMultipart
 
 # --- CONFIGURAÇÃO DE NEGÓCIO ---
 COMISSAO_PERCENTUAL = 0.10  
-WHATSAPP_SUPORTE = "351936797003" # Seu número atualizado
+WHATSAPP_SUPORTE = "351936797003" 
+CHAVE_PIX_REAL = "936797003" # Coloque aqui sua chave (Telemóvel, E-mail ou CPF)
 # ------------------------------
 
 st.set_page_config(page_title="Flight Monitor GDS - Booking", page_icon="✈️", layout="centered")
@@ -26,13 +27,15 @@ def enviar_email_confirmacao(pax_nome, pax_email, voo, pnr, metodo_pagamento="Ca
         html = f"""
         <html>
             <body style="font-family: sans-serif; padding: 20px;">
-                <h2 style="color: #1a73e8;">Sua reserva está a ser processada!</h2>
-                <p>Olá <strong>{pax_nome}</strong>, recebemos o seu pedido de reserva.</p>
+                <h2 style="color: #1a73e8;">Sua reserva foi processada com sucesso!</h2>
+                <p>Olá <strong>{pax_nome}</strong>, seu bilhete eletrônico foi gerado.</p>
                 <div style="background: #f8f9fa; padding: 15px; border-left: 5px solid #1a73e8;">
-                    <p>Localizador (PNR): <strong>{pnr}</strong></p>
+                    <p style="font-size: 18px;">Localizador (PNR): <strong>{pnr}</strong></p>
+                    <p>Companhia: {voo['Companhia']}</p>
                     <p>Método de Pagamento: {metodo_pagamento}</p>
                     <p>Total: {voo['Moeda']} {voo['Preço']:.2f}</p>
                 </div>
+                <p>Já pode consultar sua reserva no site da companhia aérea com o código acima.</p>
                 <p>Dúvidas? <a href="https://wa.me/{WHATSAPP_SUPORTE}">Fale connosco via WhatsApp</a></p>
             </body>
         </html>
@@ -83,7 +86,7 @@ if st.session_state.pagina == "busca":
 
     tipo_v = st.radio("Tipo de Viagem", ["Ida e volta", "Somente ida"], horizontal=True)
 
-    with st.form("busca_v7"):
+    with st.form("busca_v8"):
         col1, col2 = st.columns(2)
         origem_sel = col1.selectbox("Origem", opcoes)
         destino_sel = col2.selectbox("Destino", opcoes)
@@ -95,7 +98,7 @@ if st.session_state.pagina == "busca":
 
     if btn_pesquisar:
         try:
-            with st.spinner('A carregar detalhes completos...'):
+            with st.spinner('A carregar detalhes reais...'):
                 api_token = st.secrets["DUFFEL_TOKEN"]
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 
@@ -132,52 +135,78 @@ if st.session_state.pagina == "busca":
                     st.session_state.pagina = "reserva"
                     st.rerun()
 
-# --- PÁGINA 2: RESERVA COM LÓGICA PIX ---
+# --- PÁGINA 2: RESERVA REAL (SEM SIMULAÇÃO) ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    st.title("🏁 Checkout de Pagamento")
+    st.title("🏁 Checkout Real")
     st.info(f"Voo: {v['Companhia']} | Total: {v['Moeda']} {v['Preço']:.2f}")
     
-    with st.form("checkout_v7"):
+    with st.form("checkout_v8"):
         st.subheader("Dados do Passageiro")
-        n = st.text_input("Nome")
-        a = st.text_input("Apelido")
-        e = st.text_input("E-mail")
+        col_n1, col_n2 = st.columns(2)
+        n = col_n1.text_input("Nome")
+        a = col_n2.text_input("Apelido")
+        col_n3, col_n4 = st.columns(2)
+        dn = col_n3.date_input("Data de Nascimento", value=datetime(1990,1,1), min_value=datetime(1900,1,1))
+        genero = col_n4.selectbox("Gênero", ["m", "f"])
+        
+        e = st.text_input("E-mail para Bilhete")
+        tel = st.text_input("Telemóvel (ex: +351...)")
         
         st.divider()
-        st.subheader("Forma de Pagamento")
+        st.subheader("Pagamento")
         
-        # Lógica PIX para Real
         if v['Moeda'] == "R$":
-            metodo = st.radio("Selecione o método", ["PIX (Instantâneo)", "Cartão de Crédito"])
-            if metodo == "PIX (Instantâneo)":
-                st.warning("📱 Após clicar em confirmar, será gerado o QR Code PIX para pagamento.")
+            metodo = st.radio("Método", ["PIX (Gera QR Code)", "Cartão de Crédito"])
         else:
             metodo = "Cartão de Crédito"
             st.write("💳 Pagamento via Cartão de Crédito Internacional")
 
-        if metodo == "Cartão de Crédito":
-            st.text_input("Número do Cartão")
-            c1, c2 = st.columns(2)
-            c1.text_input("Validade")
-            c2.text_input("CVV")
-
-        if st.form_submit_button("CONFIRMAR RESERVA"):
-            pnr = "GTD78X" # Simulação
-            enviar_email_confirmacao(n, e, v, pnr, metodo)
-            
-            if metodo == "PIX (Instantâneo)":
-                st.session_state.pix_ativo = True
-                st.success("Reserva pré-confirmada! Utilize o PIX abaixo para emitir o bilhete.")
+        if st.form_submit_button("CONFIRMAR E EMITIR"):
+            if not n or not e:
+                st.error("Campos obrigatórios em falta.")
             else:
-                st.balloons()
-                st.success(f"Emitido com sucesso! PNR: {pnr}")
+                try:
+                    with st.spinner('A comunicar com a Companhia Aérea...'):
+                        api_token = st.secrets["DUFFEL_TOKEN"]
+                        headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                        
+                        # PAYLOAD PARA EMISSÃO REAL
+                        payload = {
+                            "data": {
+                                "type": "instant",
+                                "selected_offers": [v['id_offer']],
+                                "passengers": [{
+                                    "id": v['pax_ids'][0], "given_name": n, "family_name": a,
+                                    "gender": genero, "born_on": str(dn), "email": e, "phone_number": tel
+                                }],
+                                "payments": [{
+                                    "type": "balance", 
+                                    "currency": v['Moeda'].replace("€", "EUR").replace("R$", "BRL"),
+                                    "amount": str(round(v['Preço'], 2))
+                                }]
+                            }
+                        }
+                        
+                        res = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
+                        
+                        if res.status_code == 201:
+                            pnr_real = res.json()["data"]["booking_reference"]
+                            enviar_email_confirmacao(n, e, v, pnr_real, metodo)
+                            st.balloons()
+                            st.success(f"✅ BILHETE EMITIDO! Localizador Iberia: {pnr_real}")
+                            if metodo == "PIX (Gera QR Code)": st.session_state.pix_ativo = True
+                        else:
+                            msg_erro = res.json().get("errors", [{}])[0].get("message", "Erro na API")
+                            st.error(f"Falha na emissão: {msg_erro}")
+                except Exception as ex: st.error(f"Erro técnico: {ex}")
 
-    if v['Moeda'] == "R$" and st.session_state.get('pix_ativo'):
-        st.markdown("### 💠 Pagamento PIX")
-        st.code("chave-pix-exemplo-duffel-agencia-123456789", language="text")
-        st.image("https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=ChavePIXExemplo", caption="Escaneie para pagar")
-        st.info("O bilhete será enviado após a confirmação do pagamento no sistema.")
+    if st.session_state.get('pix_ativo'):
+        st.markdown("### 💠 PAGAMENTO PIX")
+        st.write(f"Valor a transferir: **{v['Moeda']} {v['Preço']:.2f}**")
+        st.code(CHAVE_PIX_REAL, language="text")
+        url_qr = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={CHAVE_PIX_REAL}"
+        st.image(url_qr, caption="Escaneie para pagar agora")
 
 # --- PÁGINA 3: ÁREA CLIENTE ---
 elif st.session_state.pagina == "area_cliente":
@@ -185,6 +214,6 @@ elif st.session_state.pagina == "area_cliente":
     pnr_input = st.text_input("Localizador (PNR)")
     if st.button("Aceder"):
         st.subheader(f"Reserva {pnr_input}")
-        st.write("Status: **Aguardando Pagamento/Confirmado**")
-        wa_link = f"https://wa.me/{WHATSAPP_SUPORTE}?text=Olá,%20suporte%20para%20o%20PNR%20{pnr_input}"
+        st.info("Status: Consultando base de dados da agência...")
+        wa_link = f"https://wa.me/{WHATSAPP_SUPORTE}?text=Olá,%20ajuda%20com%20o%20PNR%20{pnr_input}"
         st.markdown(f'<a href="{wa_link}" target="_blank"><button style="background:#25D366;color:white;border:none;padding:10px;border-radius:5px;cursor:pointer;">💬 WhatsApp Suporte</button></a>', unsafe_allow_html=True)
