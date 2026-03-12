@@ -491,12 +491,17 @@ elif st.session_state.pagina == "reserva":
                         </body>
                         </html>
                         """
+
+                        # --- DISPARO DO E-MAIL FINAL (O BILHETE) ---
+                        enviar_email(
+                            destinatario=email, 
+                            assunto=f"Eba! Sua viagem para {destino_f} está confirmada! PNR: {pnr}", 
+                            corpo_html=html_design
+                        )
                         
-                        # ENVIAR E-MAIL FINAL
-                        # enviar_email(email, f"Seu bilhete foi emitido! PNR: {pnr}", html_design)
+                        st.success(f"✅ Bilhete Emitido com Sucesso! PNR: {pnr}")
                         
-                        st.balloons()
-                        st.success(f"Bilhete Emitido com Sucesso! PNR: {pnr}")
+            
                     else:
                         st.error(f"Erro na Duffel: {res_ordem.json()['errors'][0]['message']}")
             except Exception as e:
