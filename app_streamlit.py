@@ -327,7 +327,7 @@ elif st.session_state.pagina == "reserva":
                                     "id": v['pax_ids'][0],
                                     "given_name": nome,
                                     "family_name": apelido,
-                                    "gender": "m" if genero_pax == "Masculino" else "f"
+                                    "gender": "m" if genero_pax == "Masculino" else "f",
                                     "born_on": str(dn),
                                     "email": email,
                                     "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
