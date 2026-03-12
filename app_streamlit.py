@@ -12,6 +12,16 @@ import stripe
 stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
+    # Forçamos a leitura da chave aqui dentro
+    import stripe
+    chave = st.secrets.get("STRIPE_SECRET_KEY")
+    
+    if not chave:
+        st.error("❌ Erro crítico: A chave STRIPE_SECRET_KEY não foi encontrada nos Secrets do Streamlit.")
+        return None
+        
+    stripe.api_key = chave
+
     try:
         # Criamos a sessão de checkout
         session = stripe.checkout.Session.create(
