@@ -49,6 +49,8 @@ if st.session_state.pagina == "busca":
 
     st.title("✈️ Flight Monitor Trips")
 
+    paises_br = ["GRU", "CGH", "GIG", "SDU", "BSB", "CNF", "SSA", "REC", "FOR", "MAO", "BEL", "MAB", "STM", "CWB", "POA", "FLN"]
+
     opcoes_cidades = [
         "São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
         "Brasília (BSB)", "Belo Horizonte (CNF)", "Belo Horizonte (PLU)",
@@ -91,7 +93,6 @@ if st.session_state.pagina == "busca":
             with st.spinner('Em busca dos melhores voos!'):
 
                 cotacao_atual = get_cotacao_ao_vivo()
-
                 api_token = st.secrets["DUFFEL_TOKEN"]
 
                 headers = {
@@ -100,11 +101,16 @@ if st.session_state.pagina == "busca":
                     "Content-Type": "application/json"
                 }
 
+                iata_o = origem[-4:-1]
+                iata_d = destino[-4:-1]
+
+                is_intl = not (iata_o in paises_br and iata_d in paises_br)
+
                 payload = {
                     "data": {
                         "slices": [{
-                            "origin": origem[-4:-1],
-                            "destination": destino[-4:-1],
+                            "origin": iata_o,
+                            "destination": iata_d,
                             "departure_date": str(data_ida)
                         }],
                         "passengers": [{"type": "adult"}],
@@ -126,7 +132,6 @@ if st.session_state.pagina == "busca":
                     for o in offers[:5]:
 
                         bagagem = "Verificar no Checkout"
-
                         if "passenger_conditions" in o:
                             bagagem = "Incluída" if o["passenger_conditions"].get("baggage_allowance") else "Apenas item pessoal"
 
@@ -136,7 +141,6 @@ if st.session_state.pagina == "busca":
                             segs = s_slice["segments"]
 
                             for i, seg in enumerate(segs):
-
                                 conexao = {"cidade": seg["destination"]["city_name"]} if i < len(segs) - 1 else None
 
                                 segmentos.append({
@@ -166,14 +170,34 @@ if st.session_state.pagina == "busca":
                             "Moeda": moeda_txt,
                             "Bagagem": bagagem,
                             "Segmentos": segmentos,
-                            "Cotacao_Usada": cotacao_atual
+                            "Cotacao_Usada": cotacao_atual,
+                            "Internacional": is_intl,
+                            "Moeda_Busca": moeda_visu,
+                            "Data_Voo": data_ida
                         })
 
-                st.success(f"Cotação aplicada: 1€ = R$ {cotacao_atual:.2f}")
+                    st.success(f"Cotação aplicada: 1€ = R$ {cotacao_atual:.2f}")
+                else:
+                    st.error("Erro na API da Duffel. Verifique seu Token.")
 
         except Exception as e:
             st.error(f"Erro: {e}")
 
+    if st.session_state.resultados_voos:
+        st.write("### ✈️ Voos Encontrados")
+        for idx, v in enumerate(st.session_state.resultados_voos):
+            with st.expander(f"{v['Companhia']} - {v['Moeda']} {v['Preço']:.2f}", expanded=True):
+                for seg in v["Segmentos"]:
+                    col_a, col_b, col_c = st.columns(3)
+                    col_a.markdown(f"**🛫 {seg['de']}**\n{seg['partida']}")
+                    col_b.markdown(f"**🛬 {seg['para']}**\n{seg['chegada']}")
+                    col_c.markdown(f"**✈️ Aeronave**\n{seg['aviao']}")
+
+                if st.button("Selecionar Voo", key=f"sel_{v['id_offer']}_{idx}"):
+                    st.session_state.voo_selecionado = v
+                    st.session_state.pagina = "reserva"
+                    st.rerun()
+                    
 # --- PÁGINA 2: RESERVA ---
 elif st.session_state.pagina == "reserva":
 
