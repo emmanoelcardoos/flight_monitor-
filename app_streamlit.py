@@ -291,6 +291,7 @@ elif st.session_state.pagina == "reserva":
         st.form_submit_button("1. Salvar Dados do Passageiro")
 
     # --- FORA DO FORMULÁRIO ---
+    valor_exato_duffel = v.get("valor_bruto_duffel")
     if metodo == "Cartão de Crédito":
         st.markdown("### 💳 Pagamento Seguro")
 
