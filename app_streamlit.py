@@ -9,34 +9,23 @@ import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
 import stripe
 
-def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
+def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
     import stripe
-    import streamlit as st
-
-    # 1. Pegamos a chave direto do Secret
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
-    
-    if not stripe.api_key:
-        st.error("❌ Erro: STRIPE_SECRET_KEY não configurada nos Secrets.")
-        return None
-
     try:
-        # 2. Criamos a sessão
         session = stripe.checkout.Session.create(
             payment_method_types=['card'],
             line_items=[{
                 'price_data': {
                     'currency': 'eur',
-                    'product_data': {
-                        'name': f"Voo: {itinerario}",
-                        'description': f"Passageiro: {nome_pax}",
-                    },
+                    'product_data': {'name': f"Voo: {itinerario}"},
                     'unit_amount': int(float(valor_eur) * 100),
                 },
                 'quantity': 1,
             }],
             mode='payment',
-            success_url="https://flightmonitorec.streamlit.app/?pagamento=sucesso",
+            # AQUI ESTÁ O SEGREDO: Passamos o offer_id e o email de volta na URL
+            success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&offer_id={offer_id}&email={email_pax}",
             cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
         )
@@ -44,7 +33,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
     except Exception as e:
         st.error(f"Erro na Stripe: {e}")
         return None
-
+    
 def enviar_email(destinatario, assunto, corpo_html):
     import smtplib
     from email.mime.multipart import MIMEMultipart
