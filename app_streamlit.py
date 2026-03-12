@@ -6,6 +6,44 @@ import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import streamlit.components.v1 as components
+from email.mime.application import MIMEApplication
+
+def enviar_email(destinatario, assunto, corpo, anexo_url=None):
+    try:
+        # Configurações do Servidor (Exemplo Gmail)
+        smtp_server = "smtp.gmail.com"
+        smtp_port = 587
+        email_remetente = st.secrets["EMAIL_USER"]
+        senha_remetente = st.secrets["EMAIL_PASSWORD"] # Senha de App
+
+        # Criando a mensagem
+        msg = MIMEMultipart()
+        msg['From'] = email_remetente
+        msg['To'] = destinatario
+        msg['Subject'] = assunto
+
+        msg.attach(MIMEText(corpo, 'plain'))
+
+        # Lógica para anexo (PDF da Duffel)
+        if anexo_url:
+            import requests
+            response = requests.get(anexo_url)
+            if response.status_code == 200:
+                part = MIMEApplication(response.content, Name="Bilhete_Duffel.pdf")
+                part['Content-Disposition'] = 'attachment; filename="Bilhete_Duffel.pdf"'
+                msg.attach(part)
+
+        # Enviando
+        server = smtplib.SMTP(smtp_server, smtp_port)
+        server.starttls()
+        server.login(email_remetente, senha_remetente)
+        server.sendmail(email_remetente, destinatario, msg.as_string())
+        server.quit()
+        return True
+    except Exception as e:
+        print(f"Erro ao enviar email: {e}")
+        return False
+
 
 # --- CONFIGURAÇÃO DE NEGÓCIO ---
 COMISSAO_PERCENTUAL = 0.12 
@@ -281,7 +319,7 @@ elif st.session_state.pagina == "reserva":
             validade_pass = col_p2.date_input("Vencimento Passaporte", key="pass_val_v16")
             data_limite_6meses = v["Data_Voo"] + timedelta(days=180)
             if validade_pass < data_limite_6meses:
-                st.error("❌ Passaporte com validade inferior a 6 meses.")
+                st.error("Passaporte com validade inferior a 6 meses.")
                 bloqueio_emissao = True
 
     # 1. FECHE O FORMULÁRIO (Certifique-se que o 'with st.form' terminou antes)
@@ -293,73 +331,99 @@ elif st.session_state.pagina == "reserva":
     # --- FORA DO FORMULÁRIO ---
     valor_exato_duffel = v.get("valor_bruto_duffel")
     if metodo == "Cartão de Crédito":
-        st.markdown("### 💳 Pagamento Seguro")
+        st.markdown("### 💳 Pagamento")
 
-        # Geramos a Intenção
-        res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
-        
-        if "data" in res_intencao:
-            client_token = res_intencao["data"]["client_token"]
-            pit_id = res_intencao["data"]["id"]
-            
-            # Componente HTML
-            duffel_card_html = f"""
-            <script src="https://js.duffel.com/v2/duffel.js"></script>
-            <div id="card-element" style="margin-bottom: 15px;"></div>
-            <button id="pay-button" style="background-color: #007BFF; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">
-                AUTORIZAR PAGAMENTO
-            </button>
-            <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
+        if valor_exato_duffel:
+            res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
 
-            <script>
-                const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
-                const cardElement = duffel.elements.create('card');
-                cardElement.mount('#card-element');
+            if "data" in res_intencao:
+                client_token = res_intencao["data"]["client_token"]
+                pit_id = res_intencao["data"]["id"]
 
-                const btn = document.getElementById('pay-button');
-                btn.addEventListener('click', async () => {{
-                    btn.disabled = true;
-                    btn.innerText = "Processando...";
-                    document.getElementById('status-msg').innerText = "Consultando o banco...";
+                # O componente HTML PRECISA estar aqui dentro para usar o client_token
+                duffel_card_html = f"""
+                <script src="https://js.duffel.com/v2/duffel.js"></script>
+                <div id="card-element" style="margin-bottom: 15px;"></div>
+                <button id="pay-button" style="background-color: #007BFF; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">
+                    AUTORIZAR PAGAMENTO
+                </button>
+                <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
 
-                    const result = await duffel.confirmPaymentIntent("{client_token}", {{
-                        payment_method: {{ card: cardElement }}
+                <script>
+                    const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
+                    const cardElement = duffel.elements.create('card');
+                    cardElement.mount('#card-element');
+
+                    const btn = document.getElementById('pay-button');
+                    btn.addEventListener('click', async () => {{
+                        btn.disabled = true;
+                        btn.innerText = "Processando...";
+                        document.getElementById('status-msg').innerText = "Consultando o banco...";
+
+                        const result = await duffel.confirmPaymentIntent("{client_token}", {{
+                            payment_method: {{ card: cardElement }}
+                        }});
+
+                        if (result.error) {{
+                            document.getElementById('status-msg').style.color = "red";
+                            document.getElementById('status-msg').innerText = result.error.message;
+                            btn.disabled = false;
+                            btn.innerText = "AUTORIZAR PAGAMENTO";
+                        }} else {{
+                            document.getElementById('status-msg').style.color = "green";
+                            document.getElementById('status-msg').innerText = "Sucesso! Pagamento aprovado.";
+                            btn.innerText = "PAGO";
+                        }}
                     }});
+                </script>
+                <style>
+                    #card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}
+                </style>
+                """
+                components.html(duffel_card_html, height=250)
 
-                    if (result.error) {{
-                        document.getElementById('status-msg').style.color = "red";
-                        document.getElementById('status-msg').innerText = result.error.message;
-                        btn.disabled = false;
-                        btn.innerText = "AUTORIZAR PAGAMENTO";
-                    }} else {{
-                        document.getElementById('status-msg').style.color = "green";
-                        document.getElementById('status-msg').innerText = "Sucesso! Pagamento aprovado.";
-                        btn.innerText = "PAGO";
-                    }}
-                }});
-            </script>
-            <style>
-                #card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}
-            </style>
-            """
-            components.html(duffel_card_html, height=200)
-
-            # Parcelamento (Apenas visual)
-            if v['Moeda'] == "R$":
-                parcelas_list = [f"{i}x sem juros" for i in range(1, 11)] + ["11x com acréscimo", "12x com acréscimo"]
-                st.selectbox("Parcelamento", parcelas_list, key="card_install_v17")
+                # Parcelamento (Apenas visual) - mantido dentro do sucesso do pagamento
+                if v['Moeda'] == "R$":
+                    parcelas_list = [f"{i}x sem juros" for i in range(1, 11)] + ["11x com acréscimo", "12x com acréscimo"]
+                    st.selectbox("Parcelamento", parcelas_list, key="card_install_v17")
+            
+            else:
+                # Caso a Duffel responda mas não traga 'data' (Erro de Token ou API)
+                st.error("Erro ao gerar token de pagamento na Duffel.")
+        
         else:
-            st.error("Não foi possível iniciar o gateway de pagamento.")
+            # Caso não haja valor_exato_duffel
+            st.error("Não foi possível iniciar o gateway de pagamento: valor ausente.")
 
     # --- BOTÃO FINAL DE EMISSÃO ---
     st.divider()
-    if st.button("2. CONFIRMAR E EMITIR BILHETE FINAL", type="primary", use_container_width=True):
+    if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
         if not nome or not email:
             st.error("Por favor, preencha os dados do passageiro acima e clique em 'Salvar'.")
         elif bloqueio_emissao:
             st.error("Verifique os dados do passaporte.")
         else:
             try:
+                # 1. Organiza os detalhes para os e-mails
+                detalhes_voo = ""
+                for seg in v['Segmentos']:
+                    detalhes_voo += f"""
+                    ✈️ {seg['companhia']} ({seg['voo']})
+                    De: {seg['de']} às {seg['saida']}
+                    Para: {seg['para']} às {seg['chegada']}
+                    Aeronave: {seg.get('aeronave', 'N/A')}
+                    Bagagem: {seg.get('bagagem', 'Consulte as regras')}
+                    -------------------------
+                    """
+
+                # 2. Envia o primeiro e-mail (Compra em Processamento)
+                # Vamos assumir que você criou a função 'enviar_email'
+                enviar_email(
+                    destinatario=email, 
+                    assunto="Seu pedido está em processamento! ✈️", 
+                    corpo=f"Olá {nome},\n\nRecebemos seu pagamento. Receberás os dados das da sua reserva assim que o pagamento for concluido!.\n\nDetalhes do Itinerário:\n{detalhes_voo}"
+                )
+
                 with st.spinner('Iniciando processo de emissão...'):
                     api_token = st.secrets["DUFFEL_TOKEN"]
                     headers = {
@@ -411,11 +475,28 @@ elif st.session_state.pagina == "reserva":
                         res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
                         if res_ordem.status_code == 201:
-                            st.balloons()
-                            st.success(f"Bilhete Emitido! PNR: {res_ordem.json()['data']['booking_reference']}")
+                            dados_reserva = res_ordem.json()['data']
+                            pnr = dados_reserva['booking_reference']
+                        
+                         # Tenta pegar o link do PDF se a Duffel já o gerou
+                            link_pdf = ""
+                            if 'documents' in dados_reserva and dados_reserva['documents']:
+                                link_pdf = dados_reserva['documents'][0].get('url', "")
+
+
+                         # 3. Envia o segundo e-mail (Bilhete Emitido + PDF)
+                            enviar_email(
+                                destinatario=email,
+                                assunto=f"Sua viagem está confirmada! Dados da Reserva na Cia Aérea: {pnr}",
+                                corpo=f"Olá {nome},\n\nSeu bilhete foi emitido com sucesso!\n\nPNR: {pnr}\n\nLink do Bilhete (PDF): {link_pdf}\n\nBoa viagem!",
+                                anexo_url=link_pdf # Se sua função suportar anexo
+                        )
+
+                         
+                            st.success(f"Bilhete Emitido! PNR: {pnr}")
                         else:
                             erro_msg = res_ordem.json()['errors'][0]['message']
-                            st.error(f"❌ Erro na Emissão: {erro_msg}")
+                            st.error(f"Erro na Emissão: {erro_msg}")
                             if "insufficient_balance" in str(res_ordem.json()):
                                 st.info("O pagamento ainda não foi confirmado no cartão do cliente.")
 
