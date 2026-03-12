@@ -8,6 +8,33 @@ from email.mime.multipart import MIMEMultipart
 import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
 import stripe
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+
+def conectar_sheets():
+    try:
+        # Pega as credenciais das Secrets do Streamlit
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        creds_dict = st.secrets["gspread"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        
+        # Abre a folha (certifica-te que o nome está igual ao que criaste no Drive)
+        return client.open("Reservas_FlightMonitor")
+    except Exception as e:
+        st.error(f"Erro ao conectar ao Google Sheets: {e}")
+        return None
+
+def salvar_alerta_preco(email, origem, destino, preco_alvo):
+    planilha = conectar_sheets()
+    if planilha:
+        try:
+            aba = planilha.worksheet("Alertas") # Nome da aba dentro do arquivo
+            aba.append_row([datetime.now().strftime("%d/%m/%Y %H:%M"), email, origem, destino, preco_alvo])
+            return True
+        except:
+            # Se a aba não existir, podemos criar ou avisar
+            return False
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
     import stripe
@@ -283,6 +310,39 @@ if st.session_state.pagina == "busca":
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
+        st.divider()
+        st.subheader("🔔 Não encontrou o preço ideal?")
+        with st.expander("Criar Alerta de Preço"):
+            col_al1, col_al2 = st.columns([2, 1])
+            email_alerta = col_al1.text_input("Seu e-mail para o alerta", key="email_alerta_input")
+            
+            # Sugerimos um preço 10% menor que o menor voo encontrado
+            menor_preco = st.session_state.resultados_voos[0]['Preço']
+            preco_desejado = col_al2.number_input(
+                "Avisar abaixo de (€):", 
+                value=float(menor_preco * 0.9),
+                key="preco_alerta_input"
+            )
+            
+            if st.button("Ativar Alerta de Preço", use_container_width=True):
+                if email_alerta:
+                    # Tenta salvar no Sheets
+                    sucesso = salvar_alerta_preco(
+                        email_alerta, 
+                        origem, # Variável da sua busca
+                        destino, # Variável da sua busca
+                        preco_desejado
+                    )
+                    if sucesso:
+                        st.success(f"✅ Alerta configurado! Avisaremos em {email_alerta} quando baixar de €{preco_desejado:.2f}")
+                    else:
+                        st.error("Erro ao conectar com a base de dados. Verifique as permissões do Sheets.")
+                else:
+                    st.warning("Por favor, insira um e-mail válido.")
+        # =========================================================
+
+    elif busca_feita:
+        st.warning("Nenhum voo encontrado para estes critérios.")
 
 # --- PÁGINA 2: RESERVA ---
 elif st.session_state.pagina == "reserva":
