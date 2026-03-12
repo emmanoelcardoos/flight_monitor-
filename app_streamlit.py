@@ -285,41 +285,40 @@ if st.session_state.pagina == "busca":
                     st.rerun()
 
 # --- PÁGINA 2: RESERVA ---
-
 elif st.session_state.pagina == "reserva":
-    # 1. Recuperamos o voo e tratamos se ele estiver vazio (evita a tela vermelha)
     v = st.session_state.get('voo_selecionado')
-    # --- RECUPERAÇÃO VIA URL ---
     params = st.query_params
+
+    # 1. RECUPERAÇÃO DE DADOS DA URL (Evita o reset da sessão)
     status_pagamento = params.get("pagamento")
     email_url = params.get("email")
     nome_url = params.get("nome")
 
-    if status_pagamento == "sucesso":
-        if "email_confirmacao_enviado" not in st.session_state:
-            destinatario = email_url if email_url else st.session_state.get('pax_email')
-            nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
+    # 2. SEÇÃO DE E-MAIL 1: IMEDIATO PÓS-PAGAMENTO
+    if status_pagamento == "sucesso" and "email_1_enviado" not in st.session_state:
+        destinatario = email_url if email_url else st.session_state.get('pax_email')
+        nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
 
-            if destinatario:
-                with st.spinner("Confirmando pagamento e enviando e-mail..."):
-                    # --- E-MAIL 1: APÓS PAGAMENTO REALIZADO ---
-                    assunto = "Pagamento Confirmado! ✈️ - Processando sua Reserva"
-                    corpo = f"""
-                    <div style="font-family: sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
-                        <h2 style="color: #003580;">Olá {nome_pax}, recebemos o seu pagamento!</h2>
-                        <p>Obrigado por escolher a <b>Flight Monitor</b>.</p>
-                        <p>Seu pagamento foi aprovado com sucesso via Stripe. Agora, nossa equipe está finalizando a emissão do seu bilhete junto à companhia aérea.</p>
-                        <p><b>Próximo passo:</b> Em instantes, você receberá um segundo e-mail contendo o seu código de reserva (PNR) e os detalhes do embarque.</p>
-                        <hr>
-                        <p style="font-size: 12px; color: #666;">Este é um e-mail automático de confirmação de transação.</p>
-                    </div>
-                    """
-                    sucesso_mail = enviar_email(destinatario, assunto, corpo)
-                    if sucesso_mail:
-                        st.session_state["email_confirmacao_enviado"] = True
-                        st.balloons()
-                        st.success(f"✅ Pagamento confirmado! E-mail enviado para {destinatario}")
+        if destinatario:
+            with st.spinner("Confirmando pagamento e enviando e-mail..."):
+                assunto = "Recebemos seu pagamento! ✈️ - Flight Monitor"
+                corpo = f"""
+                <div style="font-family: sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
+                    <h2 style="color: #003580;">Olá {nome_pax}, recebemos o seu pagamento!</h2>
+                    <p>Obrigado por escolher a <b>Flight Monitor</b>.</p>
+                    <p>Seu pagamento foi aprovado com sucesso via Stripe. Agora, nossa equipe está processando a emissão do seu bilhete junto à companhia aérea.</p>
+                    <p><b>O que acontece agora?</b> Em instantes, após a emissão ser concluída, você receberá um <b>segundo e-mail</b> contendo o seu código de reserva (PNR) e os detalhes do embarque.</p>
+                    <hr>
+                    <p style="font-size: 12px; color: #666;">Este é um e-mail automático de confirmação de transação.</p>
+                </div>
+                """
+                if enviar_email(destinatario, assunto, corpo):
+                    st.session_state["email_1_enviado"] = True
+                    st.session_state["pago"] = True
+                    st.balloons()
+                    st.success(f"✅ Pagamento confirmado! E-mail de processamento enviado para {destinatario}")
 
+    # 3. PROTEÇÃO CONTRA TELA VERMELHA (NoneType)
     if v is None:
         v = {
             "Companhia": "Voo em Processamento",
@@ -327,66 +326,14 @@ elif st.session_state.pagina == "reserva":
             "Moeda": "EUR",
             "Preço": 0.00
         }
-    # --- 3. LÓGICA DE E-MAIL AUTOMÁTICO ---
-    if params.get("pagamento") == "sucesso" and "email_enviado_imediato" not in st.session_state:
-        destinatario = email_url if email_url else st.session_state.get('pax_email')
-        nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
 
-        if destinatario:
-            with st.spinner("Enviando confirmação de pagamento..."):
-                # E-MAIL 1: IMEDIATO (O que você pediu)
-                assunto = "Recebemos seu pagamento! ✈️ - Flight Monitor"
-                corpo = f"""
-                <h2>Olá {nome_pax}, o seu pagamento foi confirmado!</h2>
-                <p>Estamos agora processando a emissão do seu bilhete junto à companhia aérea.</p>
-                <p><b>O que acontece agora?</b> Nossa equipe/sistema irá validar os dados e, em breve, você receberá um segundo e-mail com o seu código de reserva (PNR) e o bilhete eletrônico.</p>
-                <hr>
-                <p>Obrigado por confiar na Flight Monitor!</p>
-                """
-                enviar_email(destinatario, assunto, corpo)
-                st.session_state["email_enviado_imediato"] = True
-                st.success(f"✅ E-mail de confirmação enviado para {destinatario}")
-
-
-    
-
-    # =========================================================
-    # --- DAQUI PARA BAIXO SEGUE O SEU BLOCO DE AUTOMAÇÃO E CHECKOUT ---
-    # =========================================================
-    
-        # ... (seu código de automação que já está lá)
-
-    # =========================================================
-    # --- BLOCO DE AUTOMATIZAÇÃO ---
-    # =========================================================
-    params = st.query_params
-    if params.get("pagamento") == "sucesso":
-        if "reserva_concluida" not in st.session_state:
-            st.success("🎉 Pagamento Confirmado! Estamos a emitir o seu bilhete...")
-            with st.spinner("A processar reserva e a enviar e-mail de confirmação..."):
-                try:
-                    # Busca dados salvos na sessão
-                    pax_nome = st.session_state.get('pax_nome', 'Passageiro')
-                    pax_email = st.session_state.get('pax_email')
-                    itinerario = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
-                    
-                    if pax_email:
-                        corpo_email = f"<h1>Sua reserva está confirmada! ✈️</h1><p>Olá <b>{pax_nome}</b>, seu pagamento para o voo {itinerario} foi recebido!</p>"
-                        enviar_email(pax_email, f"Reserva Confirmada - {itinerario} ✈️", corpo_email)
-                        st.balloons()
-                        st.session_state["reserva_concluida"] = True
-                        st.session_state["pago"] = True
-                except Exception as e:
-                    st.error(f"Erro no automático: {e}")
-    # =========================================================
-
-    # Exibição dos dados do voo
+    # 4. EXIBIÇÃO DOS DADOS DO VOO
     st.info(f"✈️ **Voo:** {v['Companhia']} | **Trecho:** {v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}")
     st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
     st.title("🏁 Checkout")
     st.divider()
 
-    # --- MORADA FISCAL (DE VOLTA!) ---
+    # 5. MORADA FISCAL (Mantido original)
     st.subheader("🏠 Morada Fiscal / Faturamento")
     if "Real" in v.get("Moeda_Busca", "Real"):
         m1, m2, m3 = st.columns([3, 1, 1])
@@ -407,15 +354,13 @@ elif st.session_state.pagina == "reserva":
 
     metodo = st.radio("Método de pagamento:", ["Cartão de Crédito", "PIX"], horizontal=True)
 
-    # FORMULÁRIO PRINCIPAL
+    # 6. FORMULÁRIO DE DADOS DO PASSAGEIRO
     with st.form("form_final_v16"):
         st.subheader("👤 Dados do Passageiro")
-        
         c_tit1, c_tit2 = st.columns([1, 3])
         titulo_pax = c_tit1.selectbox("Título", ["Sr.", "Sra.", "Srta."], key="pax_title_v16")
         
         c1, c2 = st.columns(2)
-        # CORREÇÃO: Adicionado 'value' para recuperar os dados após o redirecionamento
         nome = c1.text_input("Nome", value=st.session_state.get('pax_nome', ''))
         apelido = c2.text_input("Apelido", value=st.session_state.get('pax_apelido', ''))
         email = st.text_input("E-mail", value=st.session_state.get('pax_email', ''))
@@ -431,50 +376,43 @@ elif st.session_state.pagina == "reserva":
             st.session_state['pax_email'] = email
             st.success("Dados salvos com sucesso!")
 
-    # --- PAGAMENTO ---
-    # --- PAGAMENTO ---
+    # 7. SEÇÃO DE PAGAMENTO
     valor_exato_duffel = v.get("valor_bruto_duffel")
     if metodo == "Cartão de Crédito":
         if not st.session_state.get("pago", False):
             if st.button("2. GERAR LINK DE PAGAMENTO", use_container_width=True):
                 if not st.session_state.get('pax_email'):
-                    st.warning("⚠️ Salve os dados do passageiro (botão acima) antes de pagar.")
+                    st.warning("⚠️ Salve os dados do passageiro acima primeiro.")
                 else:
-                    # PASSANDO OS 5 ARGUMENTOS CORRETAMENTE:
                     url = criar_checkout_stripe(
                         valor_exato_duffel, 
                         st.session_state['pax_nome'], 
                         st.session_state['pax_email'], 
                         v['Companhia'],
-                        v['id_offer'] # O 5º argumento que faltava no seu erro
+                        v.get('id_offer', 'N/A')
                     )
                     if url:
                         st.link_button("👉 CLIQUE PARA PAGAR AGORA", url, type="primary", use_container_width=True)
         else:
-            st.success("✅ Pagamento confirmado.")
-    # O seu botão original de emissão manual segue abaixo...
-    # O seu botão original continua aqui
-    
-        # ... (restante do seu código de emissão Duffel)
-    # --- BOTÃO FINAL DE EMISSÃO ---
+            st.success("✅ Pagamento já confirmado.")
+
+    # 8. BOTÃO FINAL DE EMISSÃO (E-MAIL 2)
     st.divider()
-    if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
+    if st.button("3. CONFIRMAR E EMITIR BILHETE FINAL", type="primary", use_container_width=True):
         if metodo == "Cartão de Crédito" and not st.session_state.get("pago", False):
             st.error("❌ Erro: O pagamento ainda não foi confirmado pela Stripe.")
         elif not nome or not email:
             st.error("❌ Erro: Preencha os dados do passageiro.")
         else:
             try:
-                with st.spinner('Emitindo bilhete e gerando confirmação...'):
-                    # Configurações API Duffel
+                with st.spinner('Emitindo bilhete e gerando e-mail final...'):
+                    # Lógica de emissão Duffel (Payload)
                     api_token = st.secrets["DUFFEL_TOKEN"]
                     headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                     
-                    valor_exato_duffel = v.get("valor_bruto_duffel")
                     gen_code = "m" if genero_pax == "Masculino" else "f"
                     tit_code = "mr" if titulo_pax == "Sr." else "mrs"
 
-                    # Criar Ordem na Duffel
                     payload = {
                         "data": {
                             "type": "instant",
@@ -484,19 +422,15 @@ elif st.session_state.pagina == "reserva":
                                 "family_name": apelido, "gender": gen_code, "born_on": str(dn),
                                 "email": email, "phone_number": "+351936797003"
                             }],
-                            "payments": [{"type": "balance", "currency": "EUR", "amount": valor_exato_duffel}],
-                            "metadata": {"pagamento": "stripe_concluido"}
+                            "payments": [{"type": "balance", "currency": "EUR", "amount": valor_exato_duffel}]
                         }
                     }
 
                     res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
                     if res_ordem.status_code == 201:
-                        dados_reserva = res_ordem.json()['data']
-                        pnr = dados_reserva['booking_reference']
-                        destino_f = v['Segmentos'][-1]['para']
-                        logo_cia = f"https://images.duffel.com/airlines/{v['Segmentos'][0]['companhia_iata']}.png"
-
+                        pnr = res_ordem.json()['data']['booking_reference']
+                        # Design do E-mail 2 (O seu design estilo Decolar que já estava no código)
                         # --- MONTAGEM DO DESIGN DO EMAIL (PADRÃO DECOLAR) ---
                         html_design = f"""
                         <html>
@@ -557,16 +491,16 @@ elif st.session_state.pagina == "reserva":
                         </body>
                         </html>
                         """
-
-                        enviar_email(destinatario=email, assunto=f"Eba! Sua viagem para {destino_f} está confirmada!", corpo_html=html_design)
+                        
+                        # ENVIAR E-MAIL FINAL
+                        # enviar_email(email, f"Seu bilhete foi emitido! PNR: {pnr}", html_design)
                         
                         st.balloons()
                         st.success(f"Bilhete Emitido com Sucesso! PNR: {pnr}")
                     else:
                         st.error(f"Erro na Duffel: {res_ordem.json()['errors'][0]['message']}")
-
             except Exception as e:
-                st.error(f"Erro técnico: {e}")
+                st.error(f"Erro técnico na emissão: {e}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
