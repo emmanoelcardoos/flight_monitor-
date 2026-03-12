@@ -9,6 +9,13 @@ import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
 import stripe
 
+
+# Tenta pegar de st.secrets, se não existir, fica None
+chave_stripe = st.secrets.get("STRIPE_SECRET_KEY")
+
+if chave_stripe:
+    stripe.api_key = chave_stripe
+
 # TESTE DE DIAGNÓSTICO (Remova após funcionar)
 if "STRIPE_SECRET_KEY" in st.secrets:
     st.write("✅ A chave Stripe foi detectada pelo sistema!")
@@ -20,7 +27,7 @@ stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
     # Forçamos a leitura da chave aqui dentro
     import stripe
-    chave = st.secrets.get("STRIPE_SECRET_KEY")
+    chave_stripe = st.secrets.get("STRIPE_SECRET_KEY")
     
     if not chave:
         st.error("❌ Erro crítico: A chave STRIPE_SECRET_KEY não foi encontrada nos Secrets do Streamlit.")
