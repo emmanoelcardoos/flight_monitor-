@@ -109,57 +109,7 @@ def criar_intencao_pagamento(valor_eur):
     except Exception as e:
         return {"errors": [{"message": str(e)}]}
     
-
-# --- LÓGICA DE DETEÇÃO AUTOMÁTICA PÓS-PAGAMENTO ---
-# Este código deve ficar fora de qualquer função, no corpo principal do script
-
-params = st.query_params # Pega os parâmetros da URL (ex: ?pagamento=sucesso)
-
-if params.get("pagamento") == "sucesso":
-    # Verificamos se já não emitimos o bilhete nesta sessão para evitar envios duplicados
-    if "reserva_concluida" not in st.session_state:
-        st.success("🎉 Pagamento Confirmado! Estamos a emitir o seu bilhete...")
-        
-        with st.spinner("A processar reserva na Duffel e a enviar e-mail de confirmação..."):
-            try:
-                # 1. Recuperamos os dados que estavam salvos na sessão antes de ir para a Stripe
-                # (Certifica-te que os nomes das variáveis batem com o teu st.session_state)
-                itinerario = st.session_state.get('itinerario_selecionado', 'Voo selecionado')
-                pax_nome = st.session_state.get('pax_nome', 'Passageiro')
-                pax_email = st.session_state.get('pax_email')
-                valor = st.session_state.get('valor_total', '0.00')
-
-                # 2. DISPARO AUTOMÁTICO DO E-MAIL
-                if pax_email:
-                    corpo_email = f"""
-                    <h1>Sua reserva está confirmada! ✈️</h1>
-                    <p>Olá <b>{pax_nome}</b>,</p>
-                    <p>Recebemos o seu pagamento. Aqui estão os detalhes do voo:</p>
-                    <hr>
-                    <p><b>Voo:</b> {itinerario}</p>
-                    <p><b>Valor Pago:</b> €{valor}</p>
-                    <hr>
-                    <p>Obrigado por escolher o Flight Monitor!</p>
-                    """
-                    
-                    # Chama a função que já criamos
-                    email_enviado = enviar_email(pax_email, f"Reserva Confirmada - {itinerario} ✈️", corpo_email)
-                    
-                    if email_enviado:
-                        st.balloons()
-                        st.info(f"✅ Bilhete enviado com sucesso para: {pax_email}")
-                    else:
-                        st.warning("⚠️ O pagamento foi aprovado, mas houve um erro ao enviar o e-mail automático.")
-
-                # Marcar como concluído para não repetir se o usuário der F5
-                st.session_state["reserva_concluida"] = True
-                
-            except Exception as e:
-                st.error(f"Erro ao finalizar processo automático: {e}")
-
-elif params.get("pagamento") == "cancelado":
-    st.error("❌ O pagamento foi cancelado. Se houve algum problema, tente novamente.")
-# --------------------------------------------------
+    
 
 # --- ESTADOS ---
 if 'pagina' not in st.session_state:
