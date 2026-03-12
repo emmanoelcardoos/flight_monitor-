@@ -199,166 +199,120 @@ if st.session_state.pagina == "busca":
                     st.session_state.pagina = "reserva"
                     st.rerun()
 
-# --- PÁGINA 2: RESERVA ---
+# --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
 elif st.session_state.pagina == "reserva":
-
     v = st.session_state.voo_selecionado
-
     st.title("🏁 Checkout")
     st.divider()
 
-    st.subheader("🏠 Morada Fiscal / Endereço de Faturamento")
-
-    if "Real" in v["Moeda_Busca"]:
-
+    # Morada Fiscal
+    st.subheader("🏠 Morada Fiscal / Faturamento")
+    if "Real" in v.get("Moeda_Busca", "Real"):
         m1, m2, m3 = st.columns([3, 1, 1])
         rua = m1.text_input("Rua/Logradouro")
         num = m2.text_input("Nº")
         apt = m3.text_input("Apto/Bloco")
-
         m4, m5, m6 = st.columns([2, 2, 1])
         bairro = m4.text_input("Bairro")
         cidade = m5.text_input("Cidade")
         estado = m6.text_input("Estado (UF)")
         cep = st.text_input("CEP")
-
     else:
-
         morada = st.text_input("Morada / Address Line")
+        ce1, ce2 = st.columns(2)
+        distrito = ce1.text_input("Distrito")
+        cod_postal = ce2.text_input("Código Postal")
+        pais_fiscal = st.text_input("País")
 
-        col_e1, col_e2 = st.columns(2)
-        distrito = col_e1.text_input("Distrito / Província")
-        cod_postal = col_e2.text_input("Código Postal / Zip Code")
+    metodo = st.radio("Método de pagamento:", ["Cartão de Crédito", "PIX"], horizontal=True)
 
-        pais = st.text_input("País")
-
-    metodo = st.radio(
-        "Método de pagamento:",
-        ["Cartão de Crédito", "PIX"],
-        horizontal=True
-    )
-
-    with st.form("form_final"):
-
+    # FORMULÁRIO PRINCIPAL
+    with st.form("form_final_v16"):
         st.subheader("👤 Dados do Passageiro")
-
-        bloqueio_emissao = False
-
+        
+        c_tit1, c_tit2 = st.columns([1, 3])
+        # RESOLVE O ERRO DE 'TITLE'
+        titulo_pax = c_tit1.selectbox("Título", ["Sr.", "Sra.", "Srta."], key="pax_title_v16")
+        
         c1, c2 = st.columns(2)
         nome = c1.text_input("Nome")
         apelido = c2.text_input("Apelido")
+        
         email = st.text_input("E-mail")
-        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], index=0)
-        titulo_pax = c_gen1.selectbox("Título", ["Sr.", "Sra.", "Srta."], key="pax_title_visual")
-
+        
         c3, c4 = st.columns(2)
-        dn = c3.date_input(
-            "Data de Nascimento",
-            value=datetime(1995, 1, 1),
-            max_value=datetime(2026, 2, 28)
-        )
-
+        dn = c3.date_input("Data de Nascimento", value=datetime(1995, 1, 1), max_value=datetime(2026, 2, 28))
         documento = c4.text_input("CPF ou CC (Documento de Identidade)")
 
+        # RESOLVE O ERRO DE 'GENDER'
+        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], key="pax_gender_v16")
+
+        bloqueio_emissao = False
         if v.get("Internacional", False):
-            st.warning("✈️ Voo Internacional: Dados do passaporte obrigatórios.")
+            st.warning("✈️ Voo Internacional: Passaporte obrigatório.")
             col_p1, col_p2 = st.columns(2)
             num_passaporte = col_p1.text_input("Número do Passaporte")
-            validade_pass = col_p2.date_input(
-                "Data de Vencimento do Passaporte",
-                key="pass_val"
-            )
-
+            validade_pass = col_p2.date_input("Vencimento Passaporte", key="pass_val_v16")
             data_limite_6meses = v["Data_Voo"] + timedelta(days=180)
             if validade_pass < data_limite_6meses:
-                st.error(
-                    f"❌ Erro: O passaporte deve ter validade mínima até "
-                    f"{data_limite_6meses.strftime('%d/%m/%Y')} "
-                    f"(6 meses após a viagem)."
-                )
+                st.error("❌ Passaporte com validade inferior a 6 meses.")
                 bloqueio_emissao = True
 
         if metodo == "Cartão de Crédito":
-
             st.markdown("### 💳 Cartão")
-            nome_cartao = st.text_input("Nome no Cartão")
-            numero_cartao = st.text_input("Número do Cartão")
-
-            col_card1, col_card2 = st.columns(2)
-            validade_cartao = col_card1.text_input("Data de Validade (MM/AA)")
-            cvv_cartao = col_card2.text_input("CVV", type="password")
-
-            if v["Moeda"] == "R$":
-                parcelas = [f"{i}x sem juros" for i in range(1, 11)]
-                parcelas.extend([
-                    "11x com acréscimo",
-                    "12x com acréscimo"
-                ])
-
-                st.selectbox("Parcelas", parcelas)
-
+            st.text_input("Número do Cartão", key="card_num_v16")
+            if v['Moeda'] == "R$":
+                st.selectbox("Parcelas", [f"{i}x sem juros" for i in range(1, 11)] + ["12x com acréscimo"], key="pax_parcelas_v16")
         else:
+            st.info("💠 Pagamento via PIX: Utilize o suporte abaixo.")
 
-            st.info("💠 Pagamento via PIX: Link de suporte abaixo.")
-            st.markdown(f"[💬 Chamar no WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
+        # O BOTÃO DEVE ESTAR AQUI DENTRO DO WITH ST.FORM
+        btn_confirmar = st.form_submit_button("CONFIRMAR E EMITIR BILHETE")
 
-        if st.form_submit_button("CONFIRMAR E EMITIR BILHETE"):
+        if btn_confirmar:
             if bloqueio_emissao:
-                st.error("Não é possível prosseguir: Verifique a validade do seu passaporte.")
-            elif not nome or not email or not documento:
-                st.error("Preencha todos os dados obrigatórios antes de pagar.")
+                st.error("Verifique os dados do passaporte.")
+            elif not nome or not email:
+                st.error("Preencha Nome e E-mail.")
             else:
                 try:
-                    with st.spinner('Comunicando com o emissor do cartão (Visa/Mastercard)...'):
+                    with st.spinner('Comunicando com a Duffel...'):
                         api_token = st.secrets["DUFFEL_TOKEN"]
-                        headers = {
-                            "Authorization": f"Bearer {api_token}",
-                            "Duffel-Version": "v2",
-                            "Content-Type": "application/json"
-                        }
+                        headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                        
+                        # Converte para os códigos da API
+                        gen_code = "m" if genero_pax == "Masculino" else "f"
+                        tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
+                        moeda_pg = "BRL" if "Real" in v.get("Moeda_Busca", "Real") else "EUR"
 
-                        moeda_pagamento = "BRL" if "Real" in v["Moeda_Busca"] else "EUR"
-                        titulo_codigo = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
-                        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], key="genero_pax_visual")
-                        genero_codigo = "m" if genero_pax == "Masculino" else "f"
                         payload = {
                             "data": {
                                 "type": "instant",
                                 "selected_offers": [v['id_offer']],
                                 "passengers": [{
                                     "id": v['pax_ids'][0],
-                                    "title": titulo_codigo,
+                                    "title": tit_code, # RESOLVIDO
                                     "given_name": nome,
                                     "family_name": apelido,
-                                    "gender": "m" if genero_pax == "Masculino" else "f",
+                                    "gender": gen_code, # RESOLVIDO
                                     "born_on": str(dn),
                                     "email": email,
-                                    "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
+                                    "phone_number": "+351936797003"
                                 }],
                                 "payments": [{
                                     "type": "balance",
-                                    "currency": moeda_pagamento,
+                                    "currency": moeda_pg,
                                     "amount": str(round(v['Preço'], 2))
                                 }]
                             }
                         }
-
-                        res = requests.post(
-                            "https://api.duffel.com/air/orders",
-                            headers=headers,
-                            json=payload
-                        )
-
+                        res = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
+                        
                         if res.status_code == 201:
-                            st.success("Bilhete Emitido!")
+                            st.balloons()
+                            st.success(f"Bilhete Emitido! PNR: {res.json()['data']['booking_reference']}")
                         else:
-                            erro_json = res.json()
-                            mensagem_erro = erro_json.get("errors", [{}])[0].get("message", "")
-                            codigo_erro = erro_json.get("errors", [{}])[0].get("code", "")
-
-                            st.error(f"❌ Erro do Banco: {mensagem_erro}")
-                            st.info(f"Código do Erro: {codigo_erro}")
-
+                            st.error(f"❌ Erro: {res.json()['errors'][0]['message']}")
                 except Exception as ex:
                     st.error(f"Falha técnica: {ex}")
 # --- PÁGINA 3: LOGIN ---
