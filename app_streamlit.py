@@ -317,7 +317,7 @@ elif st.session_state.pagina == "reserva":
                         }
 
                         moeda_pagamento = "BRL" if "Real" in v["Moeda_Busca"] else "EUR"
-                        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], index=0)
+                        genero_pax = st.selectbox("Gênero", ["Masculino", "Feminino"], key="genero_pax_visual")
                         genero_codigo = "m" if genero_pax == "Masculino" else "f"
                         payload = {
                             "data": {
