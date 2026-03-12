@@ -197,7 +197,7 @@ if st.session_state.pagina == "busca":
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
-                    
+
 # --- PÁGINA 2: RESERVA ---
 elif st.session_state.pagina == "reserva":
 
@@ -279,13 +279,23 @@ elif st.session_state.pagina == "reserva":
         if metodo == "Cartão de Crédito":
 
             st.markdown("### 💳 Cartão")
-            st.text_input("Número")
+            nome_cartao = st.text_input("Nome no Cartão")
+            numero_cartao = st.text_input("Número do Cartão")
+            col_card1, col_card2 = st.columns(2)
+            validade_cartao = col_card1.text_input("Data de Validade (MM/AA)")
+            cvv_cartao = col_card2.text_input("CVV", type="password")
 
             if v['Moeda'] == "R$":
                 st.selectbox(
                     "Parcelas",
-                    [f"{i}x sem juros" for i in range(1, 11)] + ["12x com taxas"]
+                    [f"{i}x sem juros" for i in range(1, 11)]
                 )
+                
+                parcelas.extend([
+                     "11x com acresimo",
+                     "12x com acresimo"
+                 ])
+        
 
         else:
 
