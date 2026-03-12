@@ -140,6 +140,9 @@ if st.query_params.get("pagamento") in ["sucesso", "cancelado"]:
 if 'voo_selecionado' not in st.session_state:
     st.session_state.voo_selecionado = None
 
+if 'busca_feita' not in st.session_state:
+    st.session_state.busca_feita = False
+
 if 'resultados_voos' not in st.session_state:
     st.session_state.resultados_voos = []
 
@@ -200,6 +203,7 @@ if st.session_state.pagina == "busca":
         btn = st.form_submit_button("PESQUISAR VOOS")
 
     if btn:
+        st.session_state.busca_feita = True
 
         try:
             with st.spinner('Em busca dos melhores voos!'):
@@ -341,8 +345,12 @@ if st.session_state.pagina == "busca":
                     st.warning("Por favor, insira um e-mail válido.")
         # =========================================================
 
-    elif busca_feita:
+    elif st.session_state.get('busca_feita'): 
         st.warning("Nenhum voo encontrado para estes critérios.")
+        
+        
+        
+
 
 # --- PÁGINA 2: RESERVA ---
 elif st.session_state.pagina == "reserva":
