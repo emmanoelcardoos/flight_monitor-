@@ -325,6 +325,7 @@ elif st.session_state.pagina == "reserva":
                                     "id": v['pax_ids'][0],
                                     "given_name": nome,
                                     "family_name": apelido,
+                                    "gender": "m",
                                     "born_on": str(dn),
                                     "email": email,
                                     "phone_number": tel_p if 'tel_p' in locals() else "+351936797003"
@@ -355,7 +356,6 @@ elif st.session_state.pagina == "reserva":
 
                 except Exception as ex:
                     st.error(f"Falha técnica: {ex}")
-
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
 
