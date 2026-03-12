@@ -294,13 +294,29 @@ if st.session_state.pagina == "busca":
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
-# --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
-elif st.session_state.pagina == "reserva":
-    v = st.session_state.voo_selecionado
 
-    # Redirecionamento forçado para garantir que o usuário fique na página de reserva ao voltar
-    if st.query_params.get("pagamento") in ["sucesso", "cancelado"]:
+# --- PÁGINA 2: RESERVA ---
+elif st.session_state.pagina == "reserva":
+    # 1. Recuperamos o voo e tratamos se ele estiver vazio (evita a tela vermelha)
+    v = st.session_state.get('voo_selecionado')
+    
+    # Se o usuário voltou da Stripe, forçamos a página a ser 'reserva'
+    if st.query_params.get("pagamento"):
         st.session_state.pagina = "reserva"
+
+    # Se não houver voo na memória (reset de sessão), avisamos amigavelmente
+    if v is None:
+        st.warning("⚠️ A sessão expirou ou o voo não foi encontrado.")
+        if st.button("Voltar para a busca"):
+            st.session_state.pagina = "busca"
+            st.rerun()
+        st.stop() # Interrompe o código aqui para não chegar na linha que dá erro
+
+    # =========================================================
+    # --- DAQUI PARA BAIXO SEGUE O SEU BLOCO DE AUTOMAÇÃO E CHECKOUT ---
+    # =========================================================
+    
+        # ... (seu código de automação que já está lá)
 
     # =========================================================
     # --- BLOCO DE AUTOMATIZAÇÃO ---
