@@ -10,104 +10,116 @@ from streamlit_gsheets import GSheetsConnection
 # 1. Configuração da Página
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# --- ESTILO CSS COM FUNDO DE MONTANHAS E GLASSMORPHISM ---
+# --- ESTILO CSS CORRIGIDO ---
 st.markdown("""
     <style>
-    /* 1. Fundo com Imagem de Montanhas */
+    /* 1. Fundo com Imagem */
     .stApp {
         background: url('https://images.unsplash.com/photo-1464822759023-fed622ff2c3b?auto=format&fit=crop&w=1920&q=80') no-repeat center center fixed;
         background-size: cover;
     }
 
-    /* 2. Card Glassmorphism (efeito líquido Apple) */
+    /* 2. Card Principal - Glassmorphism */
     [data-testid="stVerticalBlock"] > div:has(div.stButton) {
-        background: rgba(255, 255, 255, 0.2) !important;
+        background: rgba(255, 255, 255, 0.15) !important;
         backdrop-filter: blur(20px) saturate(180%) !important;
         -webkit-backdrop-filter: blur(20px) saturate(180%) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
-        border-radius: 20px !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        border-radius: 24px !important;
         padding: 40px !important;
-        max-width: 1100px !important;
-        margin: auto !important;
-        margin-top: 50px !important;
+        max-width: 1000px !important;
+        margin: 0 auto !important;
+        margin-top: 40px !important;
         box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2) !important;
     }
 
-    /* 3. INPUTS BRANCOS com texto preto */
-    div[data-baseweb="select"], div[data-baseweb="input"], .stDateInput div, .stNumberInput div, div[data-testid="stPopover"] > button {
-        background-color: white !important;
+    /* 3. INPUTS BRANCOS com texto PRETO */
+    div[data-baseweb="select"], 
+    div[data-baseweb="input"], 
+    .stDateInput div, 
+    .stNumberInput div, 
+    div[data-testid="stPopover"] > button {
+        background-color: #FFFFFF !important;
         border: none !important;
         border-radius: 12px !important;
-        color: #000000 !important;
         height: 48px !important;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05) !important;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05) !important;
     }
 
     /* Texto dentro dos inputs - PRETO */
-    input, select, [data-baseweb="select"] * {
+    input, 
+    select, 
+    textarea,
+    [data-baseweb="select"] *,
+    .stDateInput input,
+    .stNumberInput input {
         color: #000000 !important;
         font-weight: 500 !important;
+        background-color: transparent !important;
     }
-    
-    /* Labels em branco para contrastar com o fundo */
-    .stSelectbox label, .stDateInput label, .stNumberInput label, div[data-testid="stPopover"] label {
+
+    /* Placeholders em cinza */
+    input::placeholder {
+        color: #6B7280 !important;
+        opacity: 1 !important;
+    }
+
+    /* Labels em BRANCO */
+    .stSelectbox label, 
+    .stDateInput label, 
+    .stNumberInput label, 
+    div[data-testid="stPopover"] label {
         color: white !important;
         font-weight: 500 !important;
-        text-shadow: 0 2px 4px rgba(0,0,0,0.2) !important;
+        text-shadow: 0 1px 4px rgba(0,0,0,0.2) !important;
         font-size: 0.9rem !important;
         margin-bottom: 4px !important;
     }
 
-    /* Placeholders em cinza claro */
-    input::placeholder {
-        color: #666666 !important;
-        opacity: 1 !important;
+    /* 4. POPOVER DE PASSAGEIROS - Branco */
+    div[data-testid="stPopover"] > button {
+        background-color: #FFFFFF !important;
+        color: #000000 !important;
+        text-align: left !important;
+        font-weight: 500 !important;
+        border: none !important;
+    }
+    
+    div[data-testid="stPopover"] > button:hover {
+        background-color: #F9FAFB !important;
+    }
+    
+    /* Conteúdo do popover */
+    div[data-testid="stPopover"] div {
+        background-color: #FFFFFF !important;
+    }
+    
+    div[data-testid="stPopover"] input {
+        color: #000000 !important;
     }
 
-    /* 4. BOTÃO DE BUSCA - Azul Apple */
+    /* 5. BOTÃO DE BUSCA - Azul limpo */
     div.stButton > button {
-        background: #0071e3 !important;
+        background: #2563eb !important;
         color: white !important;
         border-radius: 12px !important;
-        height: 48px !important;
+        height: 52px !important;
         width: 100% !important;
         border: none !important;
         font-weight: 600 !important;
         font-size: 16px !important;
-        letter-spacing: 0.3px !important;
-        box-shadow: 0 4px 12px rgba(0, 113, 227, 0.3) !important;
-        transition: all 0.2s ease !important;
+        letter-spacing: 0.5px !important;
         margin-top: 24px !important;
+        box-shadow: 0 4px 6px rgba(37, 99, 235, 0.2) !important;
+        transition: all 0.2s ease !important;
     }
     
     div.stButton > button:hover {
-        background: #0077ed !important;
-        transform: translateY(-1px) !important;
-        box-shadow: 0 6px 16px rgba(0, 113, 227, 0.4) !important;
+        background: #1d4ed8 !important;
+        box-shadow: 0 6px 8px rgba(37, 99, 235, 0.3) !important;
     }
 
-    /* 5. TÍTULO PRINCIPAL - Branco com sombra */
-    .main-title {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-        font-size: 3.5rem;
-        font-weight: 700;
-        text-align: center;
-        color: white;
-        text-shadow: 0 4px 20px rgba(0,0,0,0.3);
-        margin-bottom: 8px;
-        letter-spacing: -0.5px;
-    }
-    
-    .sub-title {
-        text-align: center;
-        color: rgba(255, 255, 255, 0.9);
-        font-size: 1.1rem;
-        margin-bottom: 30px;
-        font-weight: 400;
-        text-shadow: 0 2px 8px rgba(0,0,0,0.2);
-    }
-
-    /* 6. BOTÃO DE MOEDA */
+    /* 6. MOEDA DISCRETA NO CANTO SUPERIOR DIREITO */
     .currency-container {
         position: fixed;
         top: 20px;
@@ -116,26 +128,53 @@ st.markdown("""
     }
     
     .currency-container button {
+        background: rgba(255, 255, 255, 0.1) !important;
+        backdrop-filter: blur(8px) !important;
+        border: 1px solid rgba(255, 255, 255, 0.2) !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+        border-radius: 20px !important;
+        width: 40px !important;
+        height: 40px !important;
+        font-weight: 500 !important;
+        font-size: 0.9rem !important;
+        box-shadow: none !important;
+        transition: all 0.2s ease !important;
+    }
+    
+    .currency-container button:hover {
         background: rgba(255, 255, 255, 0.2) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.3) !important;
         color: white !important;
-        border-radius: 12px !important;
-        width: 48px !important;
-        height: 48px !important;
-        font-weight: 600 !important;
-        font-size: 1.2rem !important;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1) !important;
     }
 
-    /* 7. CARD DE RESULTADOS - Glassmorphism */
+    /* 7. TÍTULO */
+    .main-title {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 3.5rem;
+        font-weight: 600;
+        text-align: center;
+        color: white;
+        text-shadow: 0 2px 12px rgba(0,0,0,0.3);
+        margin-bottom: 8px;
+        letter-spacing: -0.5px;
+    }
+    
+    .sub-title {
+        text-align: center;
+        color: rgba(255, 255, 255, 0.9);
+        font-size: 1rem;
+        margin-bottom: 30px;
+        font-weight: 400;
+        text-shadow: 0 1px 6px rgba(0,0,0,0.2);
+    }
+
+    /* 8. RESULTADOS - Glassmorphism */
     .results-card {
         background: rgba(255, 255, 255, 0.15) !important;
         backdrop-filter: blur(20px) saturate(180%) !important;
         border: 1px solid rgba(255, 255, 255, 0.2) !important;
-        border-radius: 20px !important;
+        border-radius: 24px !important;
         padding: 30px !important;
-        max-width: 1100px !important;
+        max-width: 1000px !important;
         margin: 30px auto !important;
         color: white !important;
     }
@@ -144,46 +183,39 @@ st.markdown("""
         color: white !important;
     }
 
-    /* 8. Esconder elementos padrão */
+    /* 9. Esconder elementos padrão */
     header, footer, #MainMenu {visibility: hidden;}
     
-    /* 9. Ajuste de espaçamento */
+    /* 10. Ajuste de espaçamento */
     .stColumn {
         gap: 16px !important;
     }
     
-    /* 10. Popover de passageiros */
-    div[data-testid="stPopover"] > button {
-        text-align: left !important;
-        color: #000000 !important;
-        background-color: white !important;
+    /* 11. Radio buttons (tipo de viagem) */
+    div[data-testid="stRadio"] > div {
+        background: rgba(255, 255, 255, 0.1) !important;
+        border-radius: 12px !important;
+        padding: 4px !important;
+        backdrop-filter: blur(4px) !important;
+        margin-bottom: 20px !important;
     }
     
-    div[data-testid="stPopover"] > button:hover {
-        background-color: #f5f5f5 !important;
+    div[data-testid="stRadio"] label {
+        background: transparent !important;
+        border-radius: 8px !important;
+        padding: 8px 16px !important;
+        color: rgba(255, 255, 255, 0.8) !important;
+        font-weight: 500 !important;
     }
     
-    /* 11. Botão de troca */
-    .swap-button {
-        background: rgba(255, 255, 255, 0.3) !important;
-        backdrop-filter: blur(10px) !important;
-        border: 1px solid rgba(255, 255, 255, 0.4) !important;
-        border-radius: 50% !important;
-        width: 36px !important;
-        height: 36px !important;
-        padding: 0 !important;
-        margin: 0 auto !important;
+    div[data-testid="stRadio"] label[data-checked="true"] {
+        background: rgba(255, 255, 255, 0.2) !important;
         color: white !important;
-        font-size: 1.2rem !important;
-        display: flex !important;
-        align-items: center !important;
-        justify-content: center !important;
-        margin-top: 24px !important;
     }
     </style>
     """, unsafe_allow_html=True)
 
-# --- MOEDA NO CANTO SUPERIOR DIREITO ---
+# --- MOEDA DISCRETA NO CANTO SUPERIOR DIREITO ---
 if 'moeda_simbolo' not in st.session_state:
     st.session_state.moeda_simbolo = "€"
 
@@ -232,9 +264,9 @@ for regiao, items in cidades.items():
         opcoes_origem.append(nome)
         opcoes_destino.append(nome)
 
-# --- CARD DE BUSCA COM DISPOSIÇÃO EXATA DA IMAGEM ---
+# --- CARD DE BUSCA ---
 with st.container():
-    # PRIMEIRA LINHA: Origem e Destino (sem botão de troca como na imagem)
+    # Primeira linha: Origem e Destino
     col1, col2 = st.columns(2)
     
     with col1:
@@ -243,9 +275,10 @@ with st.container():
     with col2:
         destino_sel = st.selectbox("Destino", opcoes_destino, key="destino")
     
-    # SEGUNDA LINHA: Tipo de viagem (radio horizontal) e Datas
+    # Segunda linha: Tipo de viagem
     tipo_v = st.radio("", ["Ida e volta", "Somente ida"], horizontal=True, label_visibility="collapsed")
     
+    # Terceira linha: Datas
     col_data1, col_data2 = st.columns(2)
     
     with col_data1:
@@ -258,20 +291,20 @@ with st.container():
             st.text_input("Volta", value="---", disabled=True)
             data_volta = None
     
-    # TERCEIRA LINHA: Passageiros (como popover)
+    # Quarta linha: Passageiros
     with st.popover("Passageiros"):
         st.markdown("### Passageiros")
         adultos = st.number_input("Adultos", 1, 9, 1)
         criancas = st.number_input("Crianças", 0, 9, 0)
         bebes = st.number_input("Bebés", 0, adultos, 0)
     
-    # BOTÃO DE PESQUISA
-    btn_pesquisar = st.button("PESQUISAR VOOS", use_container_width=True)
+    # Botão de pesquisa
+    btn_pesquisar = st.button("BUSCAR VOOS", use_container_width=True)
 
 # --- LÓGICA DE BUSCA ---
 if btn_pesquisar:
     if "..." in origem_sel or "..." in destino_sel:
-        st.warning("Por favor, selecione origem e destino.")
+        st.warning("Selecione origem e destino.")
     else:
         try:
             with st.spinner('Buscando voos...'):
@@ -297,8 +330,6 @@ if btn_pesquisar:
                             "Link": f"https://www.skyscanner.pt/transport/flights/{iata_origem}/{iata_dest}/{data_ida.strftime('%y%m%d')}"
                         }]
                         st.session_state.itinerario = f"{origem_sel} para {destino_sel}"
-                    else:
-                        st.info("Nenhum voo encontrado.")
         except Exception as e: st.error(f"Erro: {e}")
 
 # --- RESULTADOS ---
@@ -314,7 +345,7 @@ if "voos" in st.session_state:
     
     st.markdown("---")
     st.subheader("📬 Ativar Alerta")
-    email_user = st.text_input("E-mail para vigilância:", placeholder="seu@email.com")
+    email_user = st.text_input("E-mail", placeholder="seu@email.com")
     if st.button("ATIVAR ALERTA", use_container_width=True):
         if "@" in email_user:
             dados = {"email": email_user, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.moeda_simbolo}
