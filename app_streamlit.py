@@ -7,6 +7,40 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import streamlit.components.v1 as components
 from email.mime.application import MIMEApplication
+import stripe
+
+stripe.api_key = st.secrets["STRIPE_SECRET_KEY"]
+
+def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
+    try:
+        # Criamos a sessão de checkout
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'eur',
+                    'product_data': {
+                        'name': f"Reserva de Voo - {itinerario}",
+                        'description': f"Passageiro: {nome_pax}",
+                    },
+                    'unit_amount': int(float(valor_eur) * 100), # Converte para centavos
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            # URLs de retorno (Ajuste para a URL real do seu site no Streamlit Cloud)
+            success_url="https://sua-agencia.streamlit.app/?pagamento=sucesso",
+            cancel_url="https://sua-agencia.streamlit.app/?pagamento=cancelado",
+            customer_email=email_pax,
+            metadata={
+                "pax_name": nome_pax,
+                "pax_email": email_pax
+            }
+        )
+        return session.url
+    except Exception as e:
+        st.error(f"Erro ao conectar com Stripe: {e}")
+        return None
 
 def enviar_email(destinatario, assunto, corpo, anexo_url=None):
     try:
@@ -114,7 +148,7 @@ if st.session_state.pagina == "busca":
 
     opcoes_cidades = [
         "São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
-        "Brasília (BSB)", "Belo Horizonte (CNF)", "Belo Horizonte (PLU)",
+        "Brasília (BSB)", "Belo Horizonte (CNF)",
         "Salvador (SSA)", "Recife (REC)", "Fortaleza (FOR)", "Natal (NAT)",
         "Maceió (MCZ)", "João Pessoa (JPA)", "Aracaju (AJU)",
         "Porto Alegre (POA)", "Curitiba (CWB)", "Florianópolis (FLN)",
@@ -261,9 +295,29 @@ if st.session_state.pagina == "busca":
                     st.rerun()
 
 # --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
+# --- PÁGINA 2: RESERVA (VERSÃO FINAL SEM ERROS) ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.voo_selecionado
-    # Adicione isso para mostrar os dados do voo
+    
+    # =========================================================
+    # 🔎 DETECTOR DE PAGAMENTO (ATUALIZADO)
+    # =========================================================
+    try:
+        # Pega o parâmetro da URL enviado pela Stripe
+        status_pag_url = st.query_params.get("pagamento")
+        
+        if status_pag_url == "sucesso":
+            st.success("✅ **Pagamento confirmado via Stripe!** Você já pode emitir seu bilhete abaixo.")
+            st.session_state.pago = True
+        elif status_pag_url == "cancelado":
+            st.warning("⚠️ **O pagamento não foi concluído.** Tente novamente ou use outro cartão.")
+            st.session_state.pago = False
+    except Exception:
+        # Se não houver parâmetro na URL, apenas segue o fluxo normal
+        pass
+    # =========================================================
+
+    # Exibição dos dados do voo
     st.info(f"✈️ **Voo:** {v['Companhia']} | **Trecho:** {v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}")
     st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
     st.title("🏁 Checkout")
@@ -331,152 +385,115 @@ elif st.session_state.pagina == "reserva":
     # --- FORA DO FORMULÁRIO ---
     # 1. Preparação dos valores
     valor_exato_duffel = v.get("valor_bruto_duffel")
-    
+
     if metodo == "Cartão de Crédito":
-        st.markdown("### 💳 Pagamento")
+        st.markdown("### 💳 Pagamento Seguro")
         
-        # Só tentamos criar se houver valor
-        if valor_exato_duffel:
-            res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
+        # Se ainda não pagou, mostra o botão do Stripe
+        if not st.session_state.get("pago", False):
+            origem = v['Segmentos'][0]['de']
+            destino = v['Segmentos'][-1]['para']
             
-            if "data" in res_intencao:
-                client_token = res_intencao["data"]["client_token"]
-                pit_id = res_intencao["data"]["id"]
-
-                # COMPONENTE REAL (CAIXA BRANCA + BOTÃO AZUL)
-                duffel_card_html = f"""
-                <script src="https://js.duffel.com/v2/duffel.js"></script>
-                <div id="card-element" style="margin-bottom: 15px;"></div>
-                <button id="pay-button" style="background-color: #007BFF; color: white; border: none; padding: 12px; border-radius: 5px; cursor: pointer; width: 100%; font-weight: bold;">
-                    AUTORIZAR PAGAMENTO
-                </button>
-                <p id="status-msg" style="color: #666; font-size: 14px; margin-top: 10px; font-family: sans-serif;"></p>
-                <script>
-                    const duffel = new Duffel("{st.secrets["DUFFEL_TOKEN"]}");
-                    const cardElement = duffel.elements.create('card');
-                    cardElement.mount('#card-element');
-                    document.getElementById('pay-button').onclick = async () => {{
-                        const btn = document.getElementById('pay-button');
-                        btn.disabled = true; btn.innerText = "Consultando Banco...";
-                        const res = await duffel.confirmPaymentIntent("{client_token}", {{ payment_method: {{ card: cardElement }} }});
-                        if (res.error) {{
-                            document.getElementById('status-msg').style.color = "red";
-                            document.getElementById('status-msg').innerText = res.error.message;
-                            btn.disabled = false; btn.innerText = "TENTAR NOVAMENTE";
-                        }} else {{
-                            document.getElementById('status-msg').style.color = "green";
-                            document.getElementById('status-msg').innerText = "Sucesso! Pagamento Autorizado.";
-                            btn.innerText = "PAGAMENTO CONCLUÍDO";
-                        }}
-                    }};
-                </script>
-                <style>#card-element {{ border: 1px solid #ced4da; padding: 12px; border-radius: 4px; background: white; }}</style>
-                """
-                import streamlit.components.v1 as components
-                components.html(duffel_card_html, height=220)
-            else:
-                # Diagnóstico de Erro Real da Duffel
-                erro_api = res_intencao.get("errors", [{}])[0].get("message", "Erro desconhecido")
-                st.error(f"Duffel recuou: {erro_api}. Verifique se o valor {valor_exato_duffel} está correto para a moeda EUR.")
-
-    # --- BOTÃO FINAL DE EMISSÃO ---
-    st.divider()
-    if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
-        if not nome or not email:
-            st.error("Preencha Nome e E-mail e clique em 'Salvar Dados do Passageiro'.")
+            if st.button("1. GERAR LINK DE PAGAMENTO", use_container_width=True):
+                if not nome or not email:
+                    st.warning("⚠️ Preencha Nome e E-mail antes de pagar.")
+                else:
+                    url = criar_checkout_stripe(valor_exato_duffel, nome, email, f"{origem} -> {destino}")
+                    if url:
+                        st.link_button("👉 CLIQUE PARA PAGAR AGORA", url, type="primary", use_container_width=True)
         else:
-            try:
-                # Preparar Itinerário para o E-mail
-                detalhes_voo = ""
-                for seg in v['Segmentos']:
-                    detalhes_voo += f"✈️ {seg['companhia']} | De: {seg['de']} ➔ Para: {seg['para']} | Voo: {seg['voo']}\n"
+            st.info("💳 Pagamento já autorizado. Prossiga para a emissão final.")
 
-                # E-MAIL 1: PROCESSAMENTO
-                enviar_email(
-                    destinatario=email,
-                    assunto="Sua compra está em processamento! ✈️",
-                    corpo=f"Olá {nome},\n\nRecebemos sua autorização de pagamento. Já pode consultar sua reserva! \n Detalhes da Reserva na Cia Aérea:\n{detalhes_voo}\n."
-                )
+# --- BOTÃO FINAL DE EMISSÃO ---
+st.divider()
+if st.button("2. CONFIRMAR E EMITIR BILHETE", type="primary", use_container_width=True):
+    # 1. VALIDAÇÃO DE SEGURANÇA (TRAVA)
+    if metodo == "Cartão de Crédito" and not st.session_state.get("pago", False):
+        st.error("❌ Erro: O pagamento ainda não foi confirmado pela Stripe. Pague primeiro no link acima.")
+    elif not nome or not email:
+        st.error("❌ Erro: Preencha Nome e E-mail e clique em 'Salvar Dados do Passageiro'.")
+    else:
+        # Se passou na trava, inicia a emissão real
+        try:
+            # 2. Preparar Itinerário para o E-mail
+            detalhes_voo = ""
+            for seg in v['Segmentos']:
+                detalhes_voo += f"✈️ {seg['companhia']} | De: {seg['de']} ➔ Para: {seg['para']} | Voo: {seg['voo']}\n"
 
-                with st.spinner('Iniciando processo de emissão...'):
-                    api_token = st.secrets["DUFFEL_TOKEN"]
-                    headers = {
-                        "Authorization": f"Bearer {api_token}", 
-                        "Duffel-Version": "v2", 
-                        "Content-Type": "application/json"
-                    }
-                    
-                    # 1. Converte dados para a API
-                    gen_code = "m" if genero_pax == "Masculino" else "f"
-                    tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
-                    moeda_pg = "EUR"
-                    valor_exato_duffel = v.get("valor_bruto_duffel")
+            # 3. E-MAIL 1: PROCESSAMENTO (Acalma o cliente)
+            enviar_email(
+                destinatario=email,
+                assunto="Sua compra está em processamento! ✈️",
+                corpo=f"Olá {nome},\n\nRecebemos sua autorização de pagamento via Stripe. Estamos finalizando a emissão junto à Companhia Aérea.\n\nDetalhes do Itinerário:\n{detalhes_voo}"
+            )
 
-                    # 2. PASSO NOVO: Criar a Intenção de Pagamento
-                    res_intencao = criar_intencao_pagamento(float(valor_exato_duffel))
-                    
-                    if "errors" in res_intencao:
-                        st.error(f"Erro na Intenção: {res_intencao['errors'][0]['message']}")
-                    else:
-                        pit_id = res_intencao["data"]["id"]
-                        
-                        # 3. CRIAR O PEDIDO
-                        payload = {
-                            "data": {
-                                "type": "instant",
-                                "selected_offers": [v['id_offer']],
-                                "passengers": [{
-                                    "id": v['pax_ids'][0],
-                                    "title": tit_code,
-                                    "given_name": nome,
-                                    "family_name": apelido,
-                                    "gender": gen_code,
-                                    "born_on": str(dn),
-                                    "email": email,
-                                    "phone_number": "+351936797003"
-                                }],
-                                "payments": [{
-                                    "type": "balance",
-                                    "currency": "EUR",
-                                    "amount": valor_exato_duffel
-                                }],
-                                "metadata": {
-                                    "payment_intent_id": pit_id
-                                }
-                            }
+            with st.spinner('Iniciando processo de emissão...'):
+                api_token = st.secrets["DUFFEL_TOKEN"]
+                headers = {
+                    "Authorization": f"Bearer {api_token}", 
+                    "Duffel-Version": "v2", 
+                    "Content-Type": "application/json"
+                }
+                
+                gen_code = "m" if genero_pax == "Masculino" else "f"
+                tit_code = "mr" if titulo_pax == "Sr." else ("mrs" if titulo_pax == "Sra." else "ms")
+                valor_exato_duffel = v.get("valor_bruto_duffel")
+
+                # 4. CRIAR O PEDIDO NA DUFFEL (Usando seu saldo balance)
+                payload = {
+                    "data": {
+                        "type": "instant",
+                        "selected_offers": [v['id_offer']],
+                        "passengers": [{
+                            "id": v['pax_ids'][0],
+                            "title": tit_code,
+                            "given_name": nome,
+                            "family_name": apelido,
+                            "gender": gen_code,
+                            "born_on": str(dn),
+                            "email": email,
+                            "phone_number": "+351936797003"
+                        }],
+                        "payments": [{
+                            "type": "balance",
+                            "currency": "EUR",
+                            "amount": valor_exato_duffel
+                        }],
+                        "metadata": {
+                            "stripe_status": "pago_pelo_cliente"
                         }
+                    }
+                }
 
-                        res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
+                res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
-                        if res_ordem.status_code == 201:
-                            res_data = res_ordem.json()['data']
-                            pnr = res_data['booking_reference']
-                            pdf_url = res_data.get('documents', [{}])[0].get('url', "")
-                        
-                         # Tenta pegar o link do PDF se a Duffel já o gerou
-                            link_pdf = ""
-                            if 'documents' in dados_reserva and dados_reserva['documents']:
-                                link_pdf = dados_reserva['documents'][0].get('url', "")
+                if res_ordem.status_code == 201:
+                    res_data = res_ordem.json()['data']
+                    pnr = res_data['booking_reference']
+                    
+                    # Captura o PDF se disponível
+                    link_pdf = ""
+                    if 'documents' in res_data and res_data['documents']:
+                        link_pdf = res_data['documents'][0].get('url', "")
 
+                    # 5. E-MAIL 2: BILHETE FINAL + PDF
+                    enviar_email(
+                        destinatario=email,
+                        assunto=f"Sua viagem está confirmada! PNR: {pnr}",
+                        corpo=f"Olá {nome},\n\nSeu bilhete foi emitido com sucesso!\n\nPNR: {pnr}\n\nO bilhete oficial segue em anexo (link abaixo).\nLink: {link_pdf}\n\nBoa viagem!",
+                        anexo_url=link_pdf
+                    )
 
-                         # 3. Envia o segundo e-mail (Bilhete Emitido + PDF)
-                            enviar_email(
-                                destinatario=email,
-                                assunto=f"Sua viagem está confirmada! Dados da Reserva na Cia Aérea: {pnr}",
-                                corpo=f"Olá {nome},\n\nSeu bilhete foi emitido com sucesso!\n\nPNR: {pnr}\n\nLink do Bilhete (PDF): {link_pdf}\n\nBoa viagem!",
-                                anexo_url=link_pdf # Se sua função suportar anexo
-                        )
+                    st.balloons()
+                    st.success(f"Bilhete Emitido com Sucesso! PNR: {pnr}")
+                else:
+                    erro_api = res_ordem.json().get('errors', [{}])[0].get('message', 'Erro desconhecido')
+                    st.error(f"Erro na Emissão: {erro_api}")
+                    if "insufficient_balance" in str(res_ordem.json()):
+                        st.warning("⚠️ Atenção: Saldo insuficiente na conta da agência para emitir.")
 
-                         
-                            st.success(f"Bilhete Emitido! PNR: {pnr}")
-                        else:
-                            erro_msg = res_ordem.json()['errors'][0]['message']
-                            st.error(f"Erro na Emissão: {erro_msg}")
-                            if "insufficient_balance" in str(res_ordem.json()):
-                                st.info("O pagamento ainda não foi confirmado no cartão do cliente.")
-
-            except Exception as ex:
-                st.error(f"Falha técnica: {ex}")
+        except Exception as ex:
+            st.error(f"Falha técnica: {ex}")
 
 # --- PÁGINA 3: LOGIN ---
 elif st.session_state.pagina == "login":
