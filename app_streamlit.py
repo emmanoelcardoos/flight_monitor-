@@ -46,10 +46,58 @@ with st.sidebar:
 
 # --- PÁGINA 1: BUSCA ---
 if st.session_state.pagina == "busca":
-    st.title("✈️ Portal de Reservas GDS")
+    st.title("✈️ Flight Monitor Trips")
     
     # (Mantenha sua lista de cidades completa aqui no VS Code)
-    opcoes_cidades = ["São Paulo (GRU)", "Lisboa (LIS)", "Madrid (MAD)", "Recife (REC)", "Marabá (MAB)"]
+    opcoes_cidades = [
+# --- BRASIL ---
+"São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
+"Brasília (BSB)", "Belo Horizonte (CNF)", "Belo Horizonte (PLU)",
+"Salvador (SSA)", "Recife (REC)", "Fortaleza (FOR)", "Natal (NAT)",
+"Maceió (MCZ)", "João Pessoa (JPA)", "Aracaju (AJU)",
+"Porto Alegre (POA)", "Curitiba (CWB)", "Florianópolis (FLN)",
+"Cuiabá (CGB)", "Campo Grande (CGR)", "Goiânia (GYN)",
+"Belém (BEL)", "Manaus (MAO)", "Macapá (MCP)", "Boa Vista (BVB)",
+"Porto Velho (PVH)", "Rio Branco (RBR)", "Palmas (PMW)",
+"São Luís (SLZ)", "Teresina (THE)",
+"Vitória (VIX)", "Campinas (VCP)",
+"Foz do Iguaçu (IGU)", "Navegantes (NVT)", "Joinville (JOI)",
+"Ilhéus (IOS)", "Porto Seguro (BPS)", "Chapecó (XAP)",
+"Uberlândia (UDI)", "Montes Claros (MOC)", "Imperatriz (IMP)",
+"Marabá (MAB)", "Santarém (STM)",
+
+# --- PORTUGAL ---
+"Lisboa (LIS)", "Porto (OPO)", "Faro (FAO)", "Funchal (FNC)", "Ponta Delgada (PDL)",
+
+# --- ESPANHA ---
+"Madrid (MAD)", "Barcelona (BCN)", "Valência (VLC)", "Sevilha (SVQ)",
+"Málaga (AGP)", "Bilbao (BIO)", "Alicante (ALC)", "Palma de Mallorca (PMI)",
+
+# --- FRANÇA ---
+"Paris (CDG)", "Paris (ORY)", "Nice (NCE)", "Lyon (LYS)", "Marselha (MRS)",
+
+# --- ITÁLIA ---
+"Roma (FCO)", "Milão (MXP)", "Milão (LIN)", "Veneza (VCE)", "Florença (FLR)",
+"Nápoles (NAP)", "Bolonha (BLQ)",
+
+# --- ALEMANHA ---
+"Frankfurt (FRA)", "Munique (MUC)", "Berlim (BER)", "Düsseldorf (DUS)",
+
+# --- REINO UNIDO ---
+"Londres (LHR)", "Londres (LGW)", "Manchester (MAN)", "Edimburgo (EDI)",
+
+# --- HOLANDA / BÉLGICA ---
+"Amsterdã (AMS)", "Bruxelas (BRU)",
+
+# --- SUÍÇA / ÁUSTRIA ---
+"Zurique (ZRH)", "Genebra (GVA)", "Viena (VIE)",
+
+# --- ESCANDINÁVIA ---
+"Copenhaga (CPH)", "Estocolmo (ARN)", "Oslo (OSL)",
+
+# --- LESTE EUROPEU ---
+"Praga (PRG)", "Budapeste (BUD)", "Varsóvia (WAW)", "Atenas (ATH)"
+]
 
     with st.form("busca_v13"):
         col1, col2 = st.columns(2)
@@ -61,7 +109,7 @@ if st.session_state.pagina == "busca":
 
     if btn:
         try:
-            with st.spinner('Buscando conexões e franquias de bagagem...'):
+            with st.spinner('Em busca dos melhores preços!...'):
                 api_token = st.secrets["DUFFEL_TOKEN"]
                 headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
                 payload = {"data": {"slices": [{"origin": origem[-4:-1], "destination": destino[-4:-1], "departure_date": str(data_ida)}], "passengers": [{"type": "adult"}], "requested_currencies": ["EUR"]}}
