@@ -118,6 +118,9 @@ if btn_pesquisar:
                 res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
                 
                 if res.status_code == 201:
+                    res_json = res.json()
+                    st.session_state.last_offer_id = res_json['data']['offers'][0]['id']
+                    st.session_state.pax_id_duffel = res_json['data']['passengers'][0]['id']
                     offers = requests.get(f"https://api.duffel.com/air/offers?offer_request_id={res.json()['data']['id']}&sort=total_amount", headers=headers).json().get("data", [])
                     if offers:
                         resultados = []
@@ -137,19 +140,85 @@ if btn_pesquisar:
                     else: st.warning("Nenhum voo encontrado.")
         except Exception as e: st.error(f"Erro: {e}")
 
-# --- EXIBIÇÃO ---
+# --- EXIBIÇÃO E RESERVA ---
 if "voos" in st.session_state:
     st.divider()
+    st.subheader("✈️ Ofertas Disponíveis")
+    
+    # Adicionamos uma coluna de rádio para o utilizador escolher qual oferta quer reservar
     df = pd.DataFrame(st.session_state.voos)
+    
+    # Exibir a tabela
     st.dataframe(df, column_config={
         "Preço": st.column_config.NumberColumn("Preço", format=f"{st.session_state.voos[0]['Símbolo']} %.2f"),
-        "Link": st.column_config.LinkColumn("Reservar", display_text=r"(.+)"), 
+        "Link": st.column_config.LinkColumn("Site", display_text=r"(.+)"),
         "Botão": None 
     }, use_container_width=True, hide_index=True)
 
-    with st.expander("🔔 Ativar Alerta de Preço"):
-        email = st.text_input("Teu E-mail")
-        if st.button("Guardar Alerta"):
-            if "@" in email:
-                dados = {"email": email, "itinerario": st.session_state.itinerario, "origem": mapa_iata[origem_sel], "destino": mapa_iata[destino_sel], "data": str(data_ida), "data_volta": str(data_volta) if data_volta else "", "adultos": adultos, "criancas": criancas, "bebes": bebes, "preco_inicial": st.session_state.voos[0]["Preço"], "moeda": st.session_state.voos[0]['Símbolo']}
-                if guardar_alerta_planilha(dados): st.success("Alerta guardado!")
+    # --- ÁREA DE RESERVA ---
+    st.markdown("### 📝 Finalizar Reserva")
+    st.write("Preencha os dados do passageiro principal para avançar com a reserva via Duffel.")
+
+    with st.form("form_reserva"):
+        c1, c2 = st.columns(2)
+        with c1:
+            nome = st.text_input("Nome Próprio")
+            apelido = st.text_input("Apelido")
+        with c2:
+            data_nasc = st.date_input("Data de Nascimento", value=datetime(1990, 1, 1))
+            genero = st.selectbox("Género", ["m", "f"])
+        
+        email_pax = st.text_input("E-mail para confirmação")
+        telefone = st.text_input("Telefone (Ex: +351912345678)")
+
+        btn_confirmar_reserva = st.form_submit_button("CONFIRMAR E RESERVAR AGORA")
+
+    if btn_confirmar_reserva:
+        if not nome or not email_pax:
+            st.error("Por favor, preencha os dados do passageiro.")
+        else:
+            try:
+                with st.spinner('A processar a sua reserva na companhia aérea...'):
+                    api_token = st.secrets.get("DUFFEL_TOKEN")
+                    headers = {
+                        "Authorization": f"Bearer {api_token}",
+                        "Duffel-Version": "v2",
+                        "Content-Type": "application/json"
+                    }
+
+                    # 1. Pegamos o ID da oferta (precisamos do Offer ID real da Duffel)
+                    # Nota: Para isto funcionar 100%, guardamos o 'id' da oferta no session_state na busca
+                    offer_id = st.session_state.last_offer_id 
+
+                    # 2. Criar a Ordem (Reserva)
+                    payload_order = {
+                        "data": {
+                            "type": "instant",
+                            "selected_offers": [offer_id],
+                            "passengers": [
+                                {
+                                    "id": st.session_state.pax_id_duffel, # ID retornado na busca
+                                    "given_name": nome,
+                                    "family_name": apelido,
+                                    "gender": genero,
+                                    "born_on": str(data_nasc),
+                                    "email": email_pax,
+                                    "phone_number": telefone
+                                }
+                            ],
+                            "payments": [] # No modo de teste/crédito da Duffel pode ir vazio
+                        }
+                    }
+
+                    res_order = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload_order)
+                    
+                    if res_order.status_code == 201:
+                        order_data = res_order.json()["data"]
+                        st.balloons()
+                        st.success(f"🎉 Reserva efetuada com sucesso! Código da Reserva (PNR): **{order_data['booking_reference']}**")
+                        st.info("Receberá os detalhes no e-mail indicado.")
+                    else:
+                        st.error(f"Erro na reserva: {res_order.json()['errors'][0]['message']}")
+
+            except Exception as e:
+                st.error(f"Erro técnico: {e}")
