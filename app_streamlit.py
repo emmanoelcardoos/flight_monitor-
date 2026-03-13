@@ -17,30 +17,38 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     if planilha:
         try:
             aba = planilha.worksheet("Reservas_Confirmadas")
-            # Em vez de get_all_records, pegamos todos os valores brutos
+            # Pegamos todos os valores brutos para evitar erro de cabeçalho
             dados = aba.get_all_values() 
             
-            # Se a planilha estiver vazia (só o cabeçalho ou nem isso)
+            # Se a planilha tiver apenas o cabeçalho ou estiver vazia
             if len(dados) <= 1:
                 return None
                 
-            # Pulamos a primeira linha (cabeçalho) e percorremos as outras
+            # Percorremos as linhas ignorando o cabeçalho (linha 1)
             for linha in dados[1:]:
-                # Assumindo a ordem: A=Email, B=PNR, C=Passageiro...
+                # Ordem esperada na planilha:
+                # A=Email, B=PNR, C=Passageiro, D=Data, E=Itinerário, F=Valor, G=Status, H=PDF
+                
+                # Verificamos se a linha tem pelo menos Email e PNR antes de comparar
+                if len(linha) < 2:
+                    continue
+                    
                 email_planilha = str(linha[0]).strip().lower()
                 pnr_planilha = str(linha[1]).strip().upper()
-                
+
                 if email_planilha == email_cliente.strip().lower() and \
                    pnr_planilha == pnr_cliente.strip().upper():
-                    # Retornamos um dicionário organizado
+                    
+                    # Retornamos o dicionário com todos os campos, incluindo o PDF (índice 7)
                     return {
                         "Email": linha[0],
                         "PNR": linha[1],
-                        "Passageiro": linha[2],
+                        "Passageiro": linha[2] if len(linha) > 2 else "Passageiro",
                         "Data": linha[3] if len(linha) > 3 else "",
                         "Itinerário": linha[4] if len(linha) > 4 else "",
-                        "Valor": linha[5] if len(linha) > 5 else "",
-                        "Status": linha[6] if len(linha) > 6 else "Confirmado"
+                        "Valor": linha[5] if len(linha) > 5 else "€ 0.00",
+                        "Status": linha[6] if len(linha) > 6 else "Confirmado",
+                        "PDF": linha[7] if len(linha) > 7 else "" # Coluna H
                     }
             return None
         except Exception as e:
@@ -61,28 +69,27 @@ def conectar_sheets():
         return None
     
 
-def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor):
-    planilha = conectar_sheets() # Usa a função que já criamos
+def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
+    planilha = conectar_sheets()
     if planilha:
         try:
-            # Seleciona a aba que você acabou de criar manualmente
             aba = planilha.worksheet("Reservas_Confirmadas")
-            
             data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
             
-            # Adiciona a linha com os dados da venda
+            # Adicionamos o link_pdf na última coluna (Coluna H)
             aba.append_row([
-                data_hora, 
-                nome_completo, 
-                email, 
-                pnr, 
-                itinerario, 
-                f"€ {valor:.2f}", 
-                "Emitido"
+                email,           # A
+                pnr,             # B
+                nome_completo,   # C
+                data_hora,       # D
+                itinerario,      # E
+                valor,           # F
+                "Emitido",       # G
+                link_pdf         # H (NOVA COLUNA)
             ])
             return True
         except Exception as e:
-            st.error(f"Erro ao gravar na aba Reservas_Confirmadas: {e}")
+            st.error(f"Erro ao gravar no Sheets: {e}")
             return False
 
 def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
@@ -567,6 +574,16 @@ elif st.session_state.pagina == "reserva":
                         nome_completo = f"{nome} {apelido}"
                         valor_venda = f"€ {v['Preço']:.2f}"
 
+                        documentos = dados_reserva.get('documents', [])
+                        link_pdf_oficial = documentos[0]['url'] if documentos else ""
+
+                        nome_completo = f"{nome} {apelido}"
+                        itinerario_venda = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
+
+                        # CHAMADA ATUALIZADA COM O LINK DO PDF
+                        salvar_reserva_sheets(nome_completo, email, pnr, itinerario_venda, f"€ {v['Preço']:.2f}", link_pdf_oficial)
+
+
                         try:
                             sucesso_sheets = salvar_reserva_sheets(
                                 nome_completo, 
@@ -700,6 +717,15 @@ elif st.session_state.pagina == "login":
         # Ações do Cliente
         st.subheader("🛠️ Gestão da Reserva")
         col_btn1, col_btn2, col_btn3 = st.columns(3)
+
+        with col_btn1:
+            # Pega o link da coluna H (que na nossa função de busca seria o índice 7 ou chave 'PDF')
+            # Se você atualizou a função buscar_reserva_por_pnr, adicione a chave 'PDF': linha[7]
+            url_pdf = res.get('PDF', "")
+            if url_pdf:
+                st.link_button("📄 Baixar Itinerário (PDF)", url_pdf, use_container_width=True)
+            else:
+                st.button("📄 PDF em Processamento", disabled=True, use_container_width=True)
         
         with col_btn1:
             if st.button("📄 Ver Itinerário (PDF)", use_container_width=True):
