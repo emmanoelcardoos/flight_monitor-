@@ -15,7 +15,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # =========================================================
 # CONFIG GERAL
 # =========================================================
-COMISSAO_PERCENTUAL = 0.01
+COMISSAO_PERCENTUAL = 0.12
 WHATSAPP_SUPORTE = "351936797003"
 NOME_PLANILHA = "Alertas_Flight_Monitor"
 NOME_AGENCIA = "Flight Monitor Premium"
@@ -255,13 +255,6 @@ def aplicar_estilo(tema_nome="Sky Light"):
         color: {tema['text']};
     }}
 
-    .section-title {{
-        margin-top: 8px;
-        margin-bottom: 10px;
-        font-weight: 700;
-        color: {tema['text']};
-    }}
-
     div[data-testid="stMetric"] {{
         background: {tema['card']};
         border: 1px solid {tema['border']};
@@ -311,11 +304,6 @@ def aplicar_estilo(tema_nome="Sky Light"):
         border-radius: 12px !important;
     }}
 
-    .stRadio > div {{
-        background: transparent !important;
-        color: {tema['text']} !important;
-    }}
-
     h1, h2, h3, h4, h5, h6, p, label, span, div {{
         color: inherit;
     }}
@@ -339,10 +327,6 @@ def documento_valido(doc: str) -> bool:
     return len(doc.strip()) >= 5
 
 
-def limpar_texto(valor: str) -> str:
-    return str(valor).strip()
-
-
 def money_fmt(moeda: str, valor: float) -> str:
     return f"{moeda} {valor:.2f}"
 
@@ -350,6 +334,7 @@ def money_fmt(moeda: str, valor: float) -> str:
 # =========================================================
 # GOOGLE SHEETS
 # =========================================================
+@st.cache_resource(show_spinner=False)
 def conectar_sheets():
     try:
         scope = [
@@ -394,14 +379,40 @@ def garantir_abas():
         ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
     )
     obter_ou_criar_aba(
-    planilha,
-    "Pagamentos",
-    [
-        "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
-        "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
-        "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
-    ]
-)
+        planilha,
+        "Pagamentos",
+        [
+            "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
+            "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
+            "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
+        ]
+    )
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def ler_reservas_confirmadas():
+    planilha = conectar_sheets()
+    if not planilha:
+        return []
+
+    try:
+        aba = planilha.worksheet("Reservas_Confirmadas")
+        return aba.get_all_values()
+    except Exception:
+        return []
+
+
+@st.cache_data(ttl=20, show_spinner=False)
+def ler_pagamentos():
+    planilha = conectar_sheets()
+    if not planilha:
+        return []
+
+    try:
+        aba = planilha.worksheet("Pagamentos")
+        return aba.get_all_values()
+    except Exception:
+        return []
 
 
 def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
@@ -417,10 +428,177 @@ def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf
         )
         data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
         aba.append_row([email, pnr, nome_completo, data_hora, itinerario, valor, "Emitido", link_pdf])
+        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Erro ao gravar reserva no Sheets: {e}")
         return False
+
+
+def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
+    try:
+        dados = ler_reservas_confirmadas()
+        if len(dados) <= 1:
+            return None
+
+        for linha in dados[1:]:
+            if len(linha) < 2:
+                continue
+
+            email_planilha = str(linha[0]).strip().lower()
+            pnr_planilha = str(linha[1]).strip().upper()
+
+            if email_planilha == email_cliente.strip().lower() and pnr_planilha == pnr_cliente.strip().upper():
+                return {
+                    "Email": linha[0],
+                    "PNR": linha[1],
+                    "Passageiro": linha[2] if len(linha) > 2 else "Passageiro",
+                    "Data": linha[3] if len(linha) > 3 else "",
+                    "Itinerário": linha[4] if len(linha) > 4 else "",
+                    "Valor": linha[5] if len(linha) > 5 else "€ 0.00",
+                    "Status": linha[6] if len(linha) > 6 else "Confirmado",
+                    "PDF": linha[7] if len(linha) > 7 else "",
+                }
+
+        return None
+    except Exception as e:
+        st.error(f"Erro ao buscar reserva: {e}")
+        return None
+
+
+def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
+
+    try:
+        aba = obter_ou_criar_aba(
+            planilha,
+            "Alertas_Preco",
+            ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
+        )
+        aba.append_row([email, itinerario, origem, destino, str(data_ida), "", 1, 0, "", preco_inicial, moeda])
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao gravar alerta: {e}")
+        return False
+
+
+def registrar_pagamento_pendente(
+    session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
+    companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids
+):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
+
+    try:
+        aba = obter_ou_criar_aba(
+            planilha,
+            "Pagamentos",
+            [
+                "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
+                "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
+                "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
+            ]
+        )
+
+        dados = aba.get_all_values()
+        registro = [
+            session_id,
+            checkout_url,
+            email,
+            nome,
+            apelido,
+            offer_id,
+            itinerario,
+            companhia,
+            str(preco_exibido),
+            moeda_exibida,
+            str(valor_duffel_eur),
+            "PENDENTE",
+            "unpaid",
+            datetime.now().strftime("%d/%m/%Y %H:%M"),
+            "",
+            json.dumps(trechos, ensure_ascii=False),
+            json.dumps(pax_ids, ensure_ascii=False),
+        ]
+
+        for i, linha in enumerate(dados[1:], start=2):
+            if len(linha) > 0 and linha[0] == session_id:
+                aba.update(f"A{i}:Q{i}", [registro])
+                st.cache_data.clear()
+                return True
+
+        aba.append_row(registro)
+        st.cache_data.clear()
+        return True
+    except Exception as e:
+        st.error(f"Erro ao registrar pagamento pendente: {e}")
+        return False
+
+
+def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
+
+    try:
+        aba = planilha.worksheet("Pagamentos")
+        dados = aba.get_all_values()
+
+        for i, linha in enumerate(dados[1:], start=2):
+            if len(linha) > 0 and linha[0] == session_id:
+                aba.update(f"L{i}:N{i}", [[
+                    "PAGO",
+                    stripe_payment_status,
+                    datetime.now().strftime("%d/%m/%Y %H:%M")
+                ]])
+                st.cache_data.clear()
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Erro ao marcar pagamento como pago: {e}")
+        return False
+
+
+def obter_pagamento_por_session_id(session_id):
+    try:
+        dados = ler_pagamentos()
+        if len(dados) <= 1:
+            return None
+
+        headers = dados[0]
+        for linha in dados[1:]:
+            if len(linha) > 0 and linha[0] == session_id:
+                while len(linha) < len(headers):
+                    linha.append("")
+                return dict(zip(headers, linha))
+        return None
+    except Exception as e:
+        st.error(f"Erro ao obter pagamento: {e}")
+        return None
+
+
+def pagamento_confirmado(email, offer_id):
+    try:
+        dados = ler_pagamentos()
+        for linha in dados[1:]:
+            if len(linha) < 12:
+                continue
+
+            email_pg = str(linha[2]).strip().lower()
+            offer_pg = str(linha[5]).strip()
+            status_pg = str(linha[11]).strip().lower()
+
+            if email_pg == email.strip().lower() and offer_pg == offer_id and status_pg == "pago":
+                return True
+
+        return False
+    except Exception:
+        return False
+
 
 def reconstruir_voo_por_session_id(session_id):
     pagamento = obter_pagamento_por_session_id(session_id)
@@ -457,171 +635,6 @@ def reconstruir_voo_por_session_id(session_id):
         "valor_bruto_duffel": valor_duffel,
         "pax_ids": pax_ids,
     }
-
-def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
-    planilha = conectar_sheets()
-    if not planilha:
-        return None
-
-    try:
-        aba = planilha.worksheet("Reservas_Confirmadas")
-        dados = aba.get_all_values()
-
-        if len(dados) <= 1:
-            return None
-
-        for linha in dados[1:]:
-            if len(linha) < 2:
-                continue
-
-            email_planilha = str(linha[0]).strip().lower()
-            pnr_planilha = str(linha[1]).strip().upper()
-
-            if email_planilha == email_cliente.strip().lower() and pnr_planilha == pnr_cliente.strip().upper():
-                return {
-                    "Email": linha[0],
-                    "PNR": linha[1],
-                    "Passageiro": linha[2] if len(linha) > 2 else "Passageiro",
-                    "Data": linha[3] if len(linha) > 3 else "",
-                    "Itinerário": linha[4] if len(linha) > 4 else "",
-                    "Valor": linha[5] if len(linha) > 5 else "€ 0.00",
-                    "Status": linha[6] if len(linha) > 6 else "Confirmado",
-                    "PDF": linha[7] if len(linha) > 7 else "",
-                }
-        return None
-    except Exception as e:
-        st.error(f"Erro ao buscar reserva: {e}")
-        return None
-
-
-def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
-    try:
-        aba = obter_ou_criar_aba(
-            planilha,
-            "Alertas_Preco",
-            ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
-        )
-        nova_linha = [email, itinerario, origem, destino, str(data_ida), "", 1, 0, "", preco_inicial, moeda]
-        aba.append_row(nova_linha)
-        return True
-    except Exception as e:
-        st.error(f"Erro ao gravar alerta: {e}")
-        return False
-
-
-def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido, offer_id, itinerario, companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
-    try:
-        aba = obter_ou_criar_aba(
-            planilha,
-            "Pagamentos",
-            [
-                "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
-                "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
-                "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON"
-            ]
-        )
-
-        dados = aba.get_all_values()
-        for i, linha in enumerate(dados[1:], start=2):
-            if len(linha) > 0 and linha[0] == session_id:
-                aba.update(f"A{i}:P{i}", [[
-                    session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
-                    companhia, str(preco_exibido), moeda_exibida, str(valor_duffel_eur),
-                    "PENDENTE", "unpaid", datetime.now().strftime("%d/%m/%Y %H:%M"), "",
-                    json.dumps(trechos, ensure_ascii=False)
-                ]])
-                return True
-
-        aba.append_row([
-            session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
-            companhia, str(preco_exibido), moeda_exibida, str(valor_duffel_eur),
-            "PENDENTE", "unpaid", datetime.now().strftime("%d/%m/%Y %H:%M"), "",
-            json.dumps(trechos, ensure_ascii=False),
-            json.dumps(pax_ids, ensure_ascii=False)
-        ])
-        return True
-    except Exception as e:
-        st.error(f"Erro ao registrar pagamento pendente: {e}")
-        return False
-
-
-def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
-    try:
-        aba = planilha.worksheet("Pagamentos")
-        dados = aba.get_all_values()
-
-        for i, linha in enumerate(dados[1:], start=2):
-            if len(linha) > 0 and linha[0] == session_id:
-                aba.update(f"L{i}:N{i}", [[
-                    "PAGO",
-                    stripe_payment_status,
-                    datetime.now().strftime("%d/%m/%Y %H:%M")
-                ]])
-                return True
-        return False
-    except Exception as e:
-        st.error(f"Erro ao marcar pagamento como pago: {e}")
-        return False
-
-
-def obter_pagamento_por_session_id(session_id):
-    planilha = conectar_sheets()
-    if not planilha:
-        return None
-
-    try:
-        aba = planilha.worksheet("Pagamentos")
-        dados = aba.get_all_values()
-        if len(dados) <= 1:
-            return None
-
-        headers = dados[0]
-        for linha in dados[1:]:
-            if len(linha) > 0 and linha[0] == session_id:
-                while len(linha) < len(headers):
-                    linha.append("")
-                return dict(zip(headers, linha))
-        return None
-    except Exception as e:
-        st.error(f"Erro ao obter pagamento: {e}")
-        return None
-
-
-def pagamento_confirmado(email, offer_id):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
-    try:
-        aba = planilha.worksheet("Pagamentos")
-        dados = aba.get_all_values()
-
-        for linha in dados[1:]:
-            if len(linha) < 12:
-                continue
-
-            email_pg = str(linha[2]).strip().lower()
-            offer_pg = str(linha[5]).strip()
-            status_pg = str(linha[11]).strip().lower()
-
-            if email_pg == email.strip().lower() and offer_pg == offer_id and status_pg == "pago":
-                return True
-
-        return False
-    except Exception:
-        return False
 
 
 # =========================================================
@@ -714,7 +727,10 @@ def get_cotacao_ao_vivo():
         return 6.02
 
 
-def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id, companhia, preco_exibido, moeda_exibida, trechos, pax_ids):
+def criar_checkout_stripe(
+    valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id,
+    companhia, preco_exibido, moeda_exibida, trechos, pax_ids
+):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     base_url = st.secrets.get("APP_BASE_URL", "https://flightmonitorec.streamlit.app")
 
@@ -759,7 +775,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerari
             moeda_exibida=moeda_exibida,
             valor_duffel_eur=valor_eur,
             trechos=trechos,
-            pax_ids=pax_ids
+            pax_ids=pax_ids,
         )
         return session.url
     except Exception as e:
@@ -807,13 +823,12 @@ def criar_ordem_duffel(offer_id, pax_id, titulo, nome, apelido, genero, nascimen
         }
     }
 
-    res = requests.post(
+    return requests.post(
         "https://api.duffel.com/air/orders",
         headers=headers,
         json=payload,
         timeout=60,
     )
-    return res
 
 
 # =========================================================
@@ -834,6 +849,35 @@ def hero_home():
     c4.markdown('<div class="badge-ok">Suporte Pós-Venda</div>', unsafe_allow_html=True)
 
 
+def mostrar_blocos_confianca():
+    st.markdown("### Por que reservar connosco?")
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>🔐 Pagamento Protegido</h4>
+            <p class="small-muted">Processamento seguro via Stripe, com validação antes da emissão.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>📩 Confirmação por E-mail</h4>
+            <p class="small-muted">Receba o localizador, itinerário e detalhes do voo no seu e-mail.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>💬 Apoio Especializado</h4>
+            <p class="small-muted">Suporte via WhatsApp para alterações, dúvidas e acompanhamento.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
 def render_card_voo(v, idx):
     trechos = v.get("Trechos", [])
     if not trechos:
@@ -851,10 +895,7 @@ def render_card_voo(v, idx):
     with col1:
         st.markdown(f"**{v['Companhia']}**")
         st.markdown('<span class="small-muted">Tarifa disponível no momento</span>', unsafe_allow_html=True)
-        if v.get("Internacional"):
-            st.caption("🌍 Voo internacional")
-        else:
-            st.caption("✈️ Voo doméstico/regional")
+        st.caption("🌍 Voo internacional" if v.get("Internacional") else "✈️ Voo doméstico/regional")
 
     with col2:
         st.markdown(f"### {ida_origem} ➔ {ida_destino}")
@@ -891,35 +932,6 @@ def render_card_voo(v, idx):
     st.markdown('</div>', unsafe_allow_html=True)
 
 
-def mostrar_blocos_confianca():
-    st.markdown("### Por que reservar connosco?")
-    c1, c2, c3 = st.columns(3)
-
-    with c1:
-        st.markdown("""
-        <div class="agency-card">
-            <h4>🔐 Pagamento Protegido</h4>
-            <p class="small-muted">Processamento seguro via Stripe, com validação antes da emissão.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c2:
-        st.markdown("""
-        <div class="agency-card">
-            <h4>📩 Confirmação por E-mail</h4>
-            <p class="small-muted">Receba o localizador, itinerário e detalhes do voo no seu e-mail.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-    with c3:
-        st.markdown("""
-        <div class="agency-card">
-            <h4>💬 Apoio Especializado</h4>
-            <p class="small-muted">Suporte via WhatsApp para alterações, dúvidas e acompanhamento.</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-
 # =========================================================
 # APP CONFIG
 # =========================================================
@@ -939,13 +951,15 @@ if "pagamento_confirmado_atual" not in st.session_state:
     st.session_state.pagamento_confirmado_atual = False
 if "tema_visual" not in st.session_state:
     st.session_state.tema_visual = "Sky Light"
+if "abas_inicializadas" not in st.session_state:
+    garantir_abas()
+    st.session_state.abas_inicializadas = True
 
 tema_url = st.query_params.get("tema")
 if tema_url in obter_temas():
     st.session_state.tema_visual = tema_url
 
 aplicar_estilo(st.session_state.tema_visual)
-garantir_abas()
 
 if st.query_params.get("pagamento") == "sucesso":
     st.session_state.pagina = "sucesso"
@@ -983,6 +997,7 @@ if st.session_state.pagina == "busca":
         st.session_state.busca_feita = False
         st.session_state.voo_selecionado = None
         st.session_state.pagamento_confirmado_atual = False
+        st.cache_data.clear()
         st.rerun()
 
     st.markdown("## Pesquisar voos")
@@ -1317,10 +1332,13 @@ elif st.session_state.pagina == "reserva":
             st.session_state.get("pax_email"),
         ])
 
+        email_pax_atual = st.session_state.get("pax_email", "")
+        pagamento_ok = pagamento_confirmado(email_pax_atual, v["id_offer"])
+
         if not dados_ok:
             st.warning("Valide os dados do passageiro para gerar o link de pagamento.")
         else:
-            if not pagamento_confirmado(st.session_state["pax_email"], v["id_offer"]):
+            if not pagamento_ok:
                 if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
                     url_checkout = criar_checkout_stripe(
                         valor_eur=float(v["valor_bruto_duffel"]),
@@ -1332,10 +1350,9 @@ elif st.session_state.pagina == "reserva":
                         companhia=v["Companhia"],
                         preco_exibido=v["Preço"],
                         moeda_exibida=v["Moeda"],
-                        trechos=v["Trechos"],
+                        trechos=trechos,
                         pax_ids=v.get("pax_ids", []),
                     )
-                    
                     if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
@@ -1346,10 +1363,8 @@ elif st.session_state.pagina == "reserva":
     st.divider()
     st.markdown("### ✈️ Emissão do Bilhete")
 
-    pode_emitir = pagamento_confirmado(
-        st.session_state.get("pax_email", ""),
-        v["id_offer"]
-    )
+    email_atual = st.session_state.get("pax_email", "")
+    pode_emitir = pagamento_confirmado(email_atual, v["id_offer"])
 
     if not pode_emitir:
         st.info("A emissão será liberada assim que o pagamento for confirmado pela Stripe.")
@@ -1480,18 +1495,15 @@ elif st.session_state.pagina == "sucesso":
 
                 col1, col2 = st.columns(2)
                 with col1:
-                        if st.button("Ir para emissão", use_container_width=True, type="primary"):
-                            voo_reconstruido = reconstruir_voo_por_session_id(session_id)
-                            if voo_reconstruido:
-                                st.session_state.voo_selecionado = voo_reconstruido
-                                st.session_state.pagina = "reserva"
-                                st.rerun()
-                            else:
-                                st.error("Não foi possível recuperar os dados da reserva para continuar a emissão.")
-                                
-                    
-                        st.session_state.pagina = "reserva"
-                        st.rerun()
+                    if st.button("Ir para emissão", use_container_width=True, type="primary"):
+                        voo_reconstruido = reconstruir_voo_por_session_id(session_id)
+                        if voo_reconstruido:
+                            st.session_state.voo_selecionado = voo_reconstruido
+                            st.session_state.pagina = "reserva"
+                            st.rerun()
+                        else:
+                            st.error("Não foi possível recuperar os dados da reserva para continuar a emissão.")
+
                 with col2:
                     if st.button("Voltar ao início", use_container_width=True):
                         st.session_state.pagina = "busca"
