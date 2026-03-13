@@ -148,10 +148,9 @@ def criar_intencao_pagamento(valor_eur):
 if 'pagina' not in st.session_state:
     st.session_state.pagina = "busca"
 
-if st.query_params.get("pagamento") in ["sucesso", "cancelado"]:
-    st.session_state.pagina = "reserva"
-    if st.query_params.get("pagamento") == "sucesso":
-        st.session_state.pago = True
+# --- RASTREADOR DE RETORNO DO STRIPE (TOPO DO CÓDIGO) ---
+if st.query_params.get("pagamento") == "sucesso":
+    st.session_state.pagina = "sucesso"
 
 if 'voo_selecionado' not in st.session_state:
     st.session_state.voo_selecionado = None
@@ -310,32 +309,38 @@ elif st.session_state.pagina == "reserva":
 
     st.title("🏁 Finalizar Reserva")
     
-    # CORREÇÃO DO ERRO 'Segmentos' -> 'Trechos'
+    # --- CORREÇÃO DO ERRO DE SEGMENTOS ---
     trechos = v.get('Trechos', [])
     if trechos:
+        # Pegamos a ida (primeiro trecho) para mostrar o resumo
         ida = trechos[0]
         origem_p = ida[0]['de']
         destino_p = ida[-1]['para']
-        st.info(f"✈️ **Voo:** {v['Companhia']} | **Trecho:** {origem_p} ➔ {destino_p}")
+        st.info(f"✈️ **Voo:** {v.get('Companhia')} | **Resumo:** {origem_p} ➔ {destino_p}")
+    else:
+        # Caso o voo tenha vindo do formato antigo por cache
+        st.info(f"✈️ **Voo:** {v.get('Companhia')}")
     
-    st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
+    st.metric(label="Valor Total a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
     
     col_dados, col_resumo = st.columns([2, 1])
 
     with col_dados:
-        st.subheader("🏠 Dados da Morada Fiscal")
-        rua = st.text_input("Rua")
+        # --- DADOS DA MORADA FISCAL ---
+        st.subheader("🏠 Morada Fiscal")
+        rua = st.text_input("Rua/Logradouro")
         c_bairro, c_cid = st.columns(2)
         bairro = c_bairro.text_input("Bairro")
         cidade_f = c_cid.text_input("Cidade")
         c_cep, c_est = st.columns(2)
-        cep_f = c_cep.text_input("CEP / Código Postal")
-        estado_f = c_est.text_input("Estado / Distrito")
+        cep_f = c_cep.text_input("CEP")
+        estado_f = c_est.text_input("Estado (UF)")
 
         st.divider()
 
-        st.subheader("👤 Dados do Passageiro")
-        with st.form("form_pax_final"):
+        # --- DADOS DO PASSAGEIRO ---
+        st.subheader("👤 Detalhes do Passageiro")
+        with st.form("form_pax_v21"):
             c_tit, c_gen = st.columns(2)
             titulo_input = c_tit.selectbox("Título", ["Senhor", "Senhora"])
             genero_input = c_gen.selectbox("Gênero", ["Masculino", "Feminino"])
@@ -348,6 +353,16 @@ elif st.session_state.pagina == "reserva":
             
             c3, c4 = st.columns(2)
             documento_id = c3.text_input("CPF / Cartão de Cidadão")
+            
+            # --- CORREÇÃO DO CALENDÁRIO (1920 até Hoje) ---
+            nasc_pax = c4.date_input(
+                "Data de Nascimento", 
+                value=datetime(1995, 1, 1),
+                min_value=datetime(1920, 1, 1),
+                max_value=datetime.now()
+            )
+            
+            # Restante do código (Passaporte e Botão Salvar)...
             
             # CORREÇÃO DO CALENDÁRIO: min_value e max_value expandidos
             nasc_pax = c4.date_input(
@@ -614,8 +629,7 @@ elif st.session_state.pagina == "reserva":
             except Exception as e:
                 st.error(f"Erro técnico na emissão: {e}")
 
-# --- PÁGINA 3: LOGIN (ADMIN / EMISSÃO MANUAL) ---
-
+# --- PÁGINA 3: LOGIN (ÁREA DO PASSAGEIRO) ---
 elif st.session_state.pagina == "login":
     st.title("✈️ Área do Passageiro")
     st.subheader("Aceda à sua reserva e itinerários")
@@ -623,10 +637,10 @@ elif st.session_state.pagina == "login":
     # Painel de Login
     with st.container(border=True):
         col_l1, col_l2 = st.columns(2)
-        email_input = col_l1.text_input("E-mail utilizado na compra")
-        pnr_input = col_l2.text_input("Código da Reserva (PNR)")
+        email_input = col_l1.text_input("E-mail utilizado na compra", key="login_email")
+        pnr_input = col_l2.text_input("Código da Reserva (PNR)", key="login_pnr")
         
-        if st.button("Procurar Minha Viagem", use_container_width=True):
+        if st.button("Procurar Minha Viagem", use_container_width=True, type="primary"):
             with st.spinner("A consultar base de dados..."):
                 reserva_encontrada = buscar_reserva_por_pnr(email_input, pnr_input)
                 
@@ -634,6 +648,7 @@ elif st.session_state.pagina == "login":
                     st.session_state.reserva_ativa = reserva_encontrada
                     st.success("Reserva localizada com sucesso!")
                 else:
+                    st.session_state.reserva_ativa = None # Limpa se não encontrar
                     st.error("Não encontramos nenhuma reserva com estes dados.")
 
     # Se o cliente estiver "logado" (reserva encontrada)
@@ -647,62 +662,56 @@ elif st.session_state.pagina == "login":
         c1, c2, c3 = st.columns(3)
         c1.metric("Localizador (PNR)", res['PNR'])
         c2.metric("Status", res['Status'])
-        c3.metric("Total Pago", res['Valor'])
+        # Usamos .get para evitar erro caso a chave 'Valor' mude na busca
+        c3.metric("Total Pago", res.get('Valor', '€ 0.00'))
 
-        st.info(f"📍 **Itinerário:** {res['Itinerário']}")
+        st.info(f"📍 **Itinerário:** {res.get('Itinerário', 'Consultar Bilhete')}")
 
         # Ações do Cliente
         st.subheader("🛠️ Gestão da Reserva")
         col_btn1, col_btn2, col_btn3 = st.columns(3)
 
         with col_btn1:
-            # Pega o link da coluna H (que na nossa função de busca seria o índice 7 ou chave 'PDF')
-            # Se você atualizou a função buscar_reserva_por_pnr, adicione a chave 'PDF': linha[7]
-            url_pdf = res.get('PDF', "")
-            if url_pdf:
+            # Botão Único de PDF - Verifica se o link existe na Coluna H
+            url_pdf = res.get('PDF', "").strip()
+            if url_pdf and url_pdf.startswith("http"):
                 st.link_button("📄 Baixar Itinerário (PDF)", url_pdf, use_container_width=True)
             else:
                 st.button("📄 PDF em Processamento", disabled=True, use_container_width=True)
         
-        with col_btn1:
-            if st.button("📄 Ver Itinerário (PDF)", use_container_width=True):
-                st.info("O link para o PDF oficial será gerado aqui.")
-        
         with col_btn2:
-            if st.button("🔄 Alterar Voo", use_container_width=True):
-                st.warning("Para alterações, contacte o suporte via WhatsApp.")
+            st.link_button("🔄 Alterar Dados", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
         
         with col_btn3:
             if st.button("❌ Cancelar Viagem", type="secondary", use_container_width=True):
-                st.error("Atenção: Cancelamentos dependem das regras da companhia aérea.")
-
+                st.warning("Pedidos de cancelamento são analisados pelo suporte em até 24h.")
 
 # --- PÁGINA 4: SUCESSO PÓS-PAGAMENTO ---
+# --- PÁGINA 4: SUCESSO PÓS-PAGAMENTO (FIM DO ARQUIVO) ---
 elif st.session_state.pagina == "sucesso":
     st.balloons()
     st.success("### 🎉 Pagamento Confirmado com Sucesso!")
     
-    # Captura dados da URL enviados pela Stripe para personalizar a mensagem
-    nome_sucesso = st.query_params.get('nome', 'Passageiro')
-    email_sucesso = st.query_params.get('email', 'seu e-mail')
+    # Captura os dados que a Stripe envia de volta na URL
+    nome_pax = st.query_params.get('nome', 'Passageiro')
+    email_pax = st.query_params.get('email', 'seu e-mail')
     
     with st.container(border=True):
         st.markdown(f"""
-        **Olá {nome_sucesso},**
+        **Olá {nome_pax},**
         
-        Recebemos o seu pagamento com sucesso através da Stripe. 
+        Recebemos o seu pagamento. A nossa equipa e os sistemas da companhia aérea estão a processar a emissão do seu bilhete definitivo.
         
-        ✈️ **Próximos passos:**
-        1. Nossa equipe e os sistemas da companhia aérea estão a processar a emissão do seu bilhete.
-        2. Você receberá em instantes um e-mail em **{email_sucesso}** com o seu código de reserva e o itinerário completo.
-        3. Caso não receba o e-mail em até 15 minutos, verifique sua caixa de spam ou entre em contacto com o nosso suporte.
-        4. Todos os voos feitos na Flight&Fun podem ser elegiveis a verificação de dados manuais,\n caso isso ocorra, receberás um aviso por email e seu voo será emitido em até 24 horas após a confirmação dos seus dados e repesctivo pagamento.
+        ✈️ **O que verificar agora?**
+        1. Enviámos um e-mail de confirmação de pagamento para **{email_pax}**.
+        2. Em instantes, você receberá um **segundo e-mail** contendo o seu código de reserva (PNR) e os detalhes do embarque.
+        3. Caso tenha dúvidas, utilize o botão de suporte abaixo.
         """)
         
-        st.link_button("💬 Duvidas? Fale com o Nosso Suporte (WhatsApp)", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
+        st.link_button("💬 Falar com Suporte (WhatsApp)", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
     
     st.divider()
-    if st.button("Voltar para a Página Inicial", use_container_width=True):
+    if st.button("Voltar ao Início", use_container_width=True):
         st.session_state.pagina = "busca"
         st.session_state.busca_feita = False
         st.session_state.resultados_voos = []
