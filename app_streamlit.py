@@ -1303,20 +1303,20 @@ elif st.session_state.pagina == "reserva":
                     for erro in erros:
                         st.error(erro)
                 else:
-                    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
-                    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
-                    st.session_state["pax_nome"] = nome_pax.strip()
-                    st.session_state["pax_apelido"] = apelido_pax.strip()
-                    st.session_state["pax_email"] = email_pax
-                st.session_state["pax_data_nascimento"] = str(nasc_pax)
-                st.session_state["pax_nascimento"] = str(nasc_pax)
-                st.session_state["pax_documento"] = documento_id
-                st.session_state["pax_passaporte"] = passaporte
-                st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
-                    st.session_state["pax_documento"] = documento_id.strip()
-                    st.session_state["pax_nascimento"] = str(nasc_pax)
-                    st.session_state["pax_passaporte"] = passaporte.strip()
-                    st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
+    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
+    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
+    st.session_state["pax_nome"] = nome_pax.strip()
+    st.session_state["pax_apelido"] = apelido_pax.strip()
+    st.session_state["pax_email"] = email_pax
+    st.session_state["pax_data_nascimento"] = str(nasc_pax)
+    st.session_state["pax_nascimento"] = str(nasc_pax)
+    st.session_state["pax_documento"] = documento_id
+    st.session_state["pax_passaporte"] = passaporte
+    st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
+    st.session_state["pax_documento"] = documento_id.strip()
+    st.session_state["pax_nascimento"] = str(nasc_pax)
+    st.session_state["pax_passaporte"] = passaporte.strip()
+    st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
                     st.success("Dados validados com sucesso.")
 
     with col_resumo:
@@ -1490,7 +1490,7 @@ elif st.session_state.pagina == "sucesso":
             if payment_status == "paid":
                 st.session_state["session_id_pagamento_atual"] = session_id
                 marcar_pagamento_como_pago(session_id, stripe_payment_status=payment_status)
-                st.session_state.pagamento_confirmado_atual = True
+                st.session_state["pagamento_confirmado_atual"] = True
 
                 if pagamento:
                     nome_cliente = f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip()
@@ -1520,14 +1520,15 @@ elif st.session_state.pagina == "sucesso":
 
                 if pagamento:
                     st.markdown('<div class="box-soft">', unsafe_allow_html=True)
-                    st.write(f"**Itinerário:** {pagamento.get('Itinerario', '')}")
-                    st.write(f"**Companhia:** {pagamento.get('Companhia', '')}")
-                    st.write(f"**Preço:** {pagamento.get('Moeda_Exibida', '')} {pagamento.get('Preco_Exibido', '')}")
+                    st.write(f"**Itinerário:** {pagamento.get('itinerario', '')}")
+                    st.write(f"**Companhia:** {pagamento.get('companhia', '')}")
+                    st.write(f"**Preço:** {pagamento.get('moeda_exibida', '')} {pagamento.get('preco_exibido', '')}")
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 st.info("Volte para a página da reserva para concluir a emissão do bilhete.")
 
                 col1, col2 = st.columns(2)
+
                 with col1:
                     if st.button("Ir para emissão", use_container_width=True, type="primary"):
                         voo_reconstruido = reconstruir_voo_por_session_id(session_id)
@@ -1536,18 +1537,27 @@ elif st.session_state.pagina == "sucesso":
                             st.session_state["voo_selecionado"] = voo_reconstruido
                             st.session_state["pagamento_confirmado_atual"] = True
                             st.session_state["session_id_pagamento_atual"] = session_id
-                            st.session_state["pax_email"] = pagamento.get("email", "")
-                            st.session_state["pax_nome"] = pagamento.get("nome", "")
-                            st.session_state["pax_apelido"] = pagamento.get("apelido", "")
+
+                            if pagamento:
+                                st.session_state["pax_email"] = pagamento.get("email", "")
+                                st.session_state["pax_nome"] = pagamento.get("nome", "")
+                                st.session_state["pax_apelido"] = pagamento.get("apelido", "")
+                                st.session_state["pax_data_nascimento"] = pagamento.get("data_nascimento", "")
+                                st.session_state["pax_nascimento"] = pagamento.get("data_nascimento", "")
+                                st.session_state["pax_documento"] = pagamento.get("documento", "")
+                                st.session_state["pax_passaporte"] = pagamento.get("passaporte", "")
+                                st.session_state["pax_validade_passaporte"] = pagamento.get("validade_passaporte", "")
+                                st.session_state["pax_titulo"] = pagamento.get("titulo", "")
+                                st.session_state["pax_genero"] = pagamento.get("genero", "")
+
                             st.session_state["pagina"] = "reserva"
                             st.rerun()
                         else:
                             st.error("Não foi possível recuperar os dados da reserva para continuar a emissão.")
-                
 
                 with col2:
                     if st.button("Voltar ao início", use_container_width=True):
-                        st.session_state.pagina = "busca"
+                        st.session_state["pagina"] = "busca"
                         st.rerun()
 
             else:
