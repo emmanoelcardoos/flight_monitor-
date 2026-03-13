@@ -238,7 +238,7 @@ if st.button("Limpar Cache e Nova Busca"):
     st.session_state.busca_feita = False
     st.rerun()
 
-    
+
 if st.session_state.pagina == "busca":
 
     st.title("✈️ Flight Monitor Trips")
@@ -489,21 +489,36 @@ if st.session_state.resultados_voos:
         
 
         for idx, v in enumerate(st.session_state.resultados_voos):
+
+            trechos = v.get('Trechos')
+            if not trechos or not isinstance(trechos, list):
+             continue
+
+
             with st.container(border=True):
                 col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
 
                 with col_logo:
-                    st.subheader(v['Companhia'])
+                    st.subheader(v.get('Companhia', 'Aérea'))
                 
                 with col_info:
                     # Exibição resumida da IDA
-                    ida = v['Trechos'][0]
-                    st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
-                    
+
+                    ida = trechos[0]
+                    origem_p = ida[0].get('de', 'N/D')
+                    destino_p = ida[-1].get('para', 'N/D')
+                    st.markdown(f"**🛫 Ida:** {origem_p} ➔ {destino_p}")
+
+
+
                     # Exibição resumida da VOLTA (se existir)
                     if len(v['Trechos']) > 1:
-                        volta = v['Trechos'][1]
-                        st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
+
+                        volta = trechos[1]
+                        origem_v = volta[0].get('de', 'N/D')
+                        destino_v = volta[-1].get('para', 'N/D')
+                        st.markdown(f"**🛬 Volta:** {origem_v} ➔ {destino_v}")
+                        
                     
                     # Detalhes em expander (Design Limpo)
                     with st.expander("Ver escalas e aeronaves"):
@@ -518,17 +533,15 @@ if st.session_state.resultados_voos:
                                 st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
 
                 with col_preco:
-                    st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
-                    if st.button("SELECIONAR", key=f"sel_{v['id_offer']}_{idx}", use_container_width=True, type="primary"):
-                        st.session_state.voo_selecionado = v
-                        st.session_state.pagina = "reserva"
-                        st.rerun()
 
-
-
-        
-        
-        
+                    preco_v = v.get('Preço', 0)
+                    moeda_v = v.get('Moeda', '€')
+                    st.subheader(f"{moeda_v} {preco_v:.2f}")
+                
+                if st.button("SELECIONAR", key=f"btn_res_final_{idx}"):
+                    st.session_state.voo_selecionado = v
+                    st.session_state.pagina = "reserva"
+                    st.rerun()
 
 
 # --- PÁGINA 2: RESERVA ---
