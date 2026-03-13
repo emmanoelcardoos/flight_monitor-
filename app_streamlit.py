@@ -1,15 +1,14 @@
 import json
 import re
 from datetime import datetime, timedelta
-
-import gspread
 import requests
 import smtplib
 import streamlit as st
 import stripe
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from oauth2client.service_account import ServiceAccountCredentials
+from supabase import create_client
+from supabase.lib.client_options import ClientOptions
 
 
 # =========================================================
@@ -332,153 +331,87 @@ def money_fmt(moeda: str, valor: float) -> str:
 
 
 # =========================================================
-# GOOGLE SHEETS
+# SUPABASE
 # =========================================================
 @st.cache_resource(show_spinner=False)
-def conectar_sheets():
-    try:
-        scope = [
-            "https://spreadsheets.google.com/feeds",
-            "https://www.googleapis.com/auth/drive",
-        ]
-        creds_dict = st.secrets["gspread"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        return client.open(NOME_PLANILHA)
-    except Exception as e:
-        st.error(f"Erro ao conectar ao Google Sheets: {e}")
-        return None
-
-
-def obter_ou_criar_aba(planilha, nome_aba, cabecalho):
-    try:
-        try:
-            aba = planilha.worksheet(nome_aba)
-        except Exception:
-            aba = planilha.add_worksheet(title=nome_aba, rows=1000, cols=max(20, len(cabecalho) + 2))
-            aba.append_row(cabecalho)
-        return aba
-    except Exception as e:
-        st.error(f"Erro ao preparar a aba '{nome_aba}': {e}")
-        return None
-
-
-def garantir_abas():
-    planilha = conectar_sheets()
-    if not planilha:
-        return
-
-    obter_ou_criar_aba(
-        planilha,
-        "Reservas_Confirmadas",
-        ["Email", "PNR", "Passageiro", "Data", "Itinerário", "Valor", "Status", "PDF"]
-    )
-    obter_ou_criar_aba(
-        planilha,
-        "Alertas_Preco",
-        ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
-    )
-    obter_ou_criar_aba(
-        planilha,
-        "Pagamentos",
-        [
-            "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
-            "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
-            "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
-        ]
+def conectar_supabase():
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
+    return create_client(
+        url,
+        key,
+        options=ClientOptions(
+            auto_refresh_token=False,
+            persist_session=False,
+        ),
     )
 
 
-@st.cache_data(ttl=20, show_spinner=False)
-def ler_reservas_confirmadas():
-    planilha = conectar_sheets()
-    if not planilha:
-        return []
-
+def salvar_reserva_db(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
     try:
-        aba = planilha.worksheet("Reservas_Confirmadas")
-        return aba.get_all_values()
-    except Exception:
-        return []
-
-
-@st.cache_data(ttl=20, show_spinner=False)
-def ler_pagamentos():
-    planilha = conectar_sheets()
-    if not planilha:
-        return []
-
-    try:
-        aba = planilha.worksheet("Pagamentos")
-        return aba.get_all_values()
-    except Exception:
-        return []
-
-
-def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
-    try:
-        aba = obter_ou_criar_aba(
-            planilha,
-            "Reservas_Confirmadas",
-            ["Email", "PNR", "Passageiro", "Data", "Itinerário", "Valor", "Status", "PDF"]
-        )
-        data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-        aba.append_row([email, pnr, nome_completo, data_hora, itinerario, valor, "Emitido", link_pdf])
-        st.cache_data.clear()
+        supabase = conectar_supabase()
+        payload = {
+            "email": email.strip().lower(),
+            "pnr": pnr.strip().upper(),
+            "passageiro": nome_completo,
+            "itinerario": itinerario,
+            "valor": valor,
+            "status": "Emitido",
+            "pdf_url": link_pdf,
+        }
+        supabase.table("reservas").insert(payload).execute()
         return True
     except Exception as e:
-        st.error(f"Erro ao gravar reserva no Sheets: {e}")
+        st.error(f"Erro ao gravar reserva: {e}")
         return False
 
 
 def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     try:
-        dados = ler_reservas_confirmadas()
-        if len(dados) <= 1:
+        supabase = conectar_supabase()
+        resp = (
+            supabase.table("reservas")
+            .select("*")
+            .eq("email", email_cliente.strip().lower())
+            .eq("pnr", pnr_cliente.strip().upper())
+            .limit(1)
+            .execute()
+        )
+
+        if not resp.data:
             return None
 
-        for linha in dados[1:]:
-            if len(linha) < 2:
-                continue
-
-            email_planilha = str(linha[0]).strip().lower()
-            pnr_planilha = str(linha[1]).strip().upper()
-
-            if email_planilha == email_cliente.strip().lower() and pnr_planilha == pnr_cliente.strip().upper():
-                return {
-                    "Email": linha[0],
-                    "PNR": linha[1],
-                    "Passageiro": linha[2] if len(linha) > 2 else "Passageiro",
-                    "Data": linha[3] if len(linha) > 3 else "",
-                    "Itinerário": linha[4] if len(linha) > 4 else "",
-                    "Valor": linha[5] if len(linha) > 5 else "€ 0.00",
-                    "Status": linha[6] if len(linha) > 6 else "Confirmado",
-                    "PDF": linha[7] if len(linha) > 7 else "",
-                }
-
-        return None
+        r = resp.data[0]
+        return {
+            "Email": r.get("email", ""),
+            "PNR": r.get("pnr", ""),
+            "Passageiro": r.get("passageiro", "Passageiro"),
+            "Data": r.get("data_criacao", ""),
+            "Itinerário": r.get("itinerario", ""),
+            "Valor": r.get("valor", "€ 0.00"),
+            "Status": r.get("status", "Confirmado"),
+            "PDF": r.get("pdf_url", ""),
+        }
     except Exception as e:
         st.error(f"Erro ao buscar reserva: {e}")
         return None
 
 
 def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
     try:
-        aba = obter_ou_criar_aba(
-            planilha,
-            "Alertas_Preco",
-            ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
-        )
-        aba.append_row([email, itinerario, origem, destino, str(data_ida), "", 1, 0, "", preco_inicial, moeda])
-        st.cache_data.clear()
+        supabase = conectar_supabase()
+        payload = {
+            "email": email.strip().lower(),
+            "itinerario": itinerario,
+            "origem": origem,
+            "destino": destino,
+            "data_ida": str(data_ida),
+            "preco_inicial": preco_inicial,
+            "moeda": moeda,
+            "ativo": True,
+            "disparos": 0,
+        }
+        supabase.table("alertas_preco").insert(payload).execute()
         return True
     except Exception as e:
         st.error(f"Erro ao gravar alerta: {e}")
@@ -489,50 +422,40 @@ def registrar_pagamento_pendente(
     session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
     companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids
 ):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
     try:
-        aba = obter_ou_criar_aba(
-            planilha,
-            "Pagamentos",
-            [
-                "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
-                "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
-                "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
-            ]
+        supabase = conectar_supabase()
+
+        payload = {
+            "session_id": session_id,
+            "checkout_url": checkout_url,
+            "email": email.strip().lower(),
+            "nome": nome,
+            "apelido": apelido,
+            "offer_id": offer_id,
+            "itinerario": itinerario,
+            "companhia": companhia,
+            "preco_exibido": preco_exibido,
+            "moeda_exibida": moeda_exibida,
+            "valor_duffel_eur": valor_duffel_eur,
+            "status_pagamento": "PENDENTE",
+            "stripe_payment_status": "unpaid",
+            "trechos_json": trechos,
+            "pax_ids_json": pax_ids,
+        }
+
+        existente = (
+            supabase.table("pagamentos")
+            .select("id")
+            .eq("session_id", session_id)
+            .limit(1)
+            .execute()
         )
 
-        dados = aba.get_all_values()
-        registro = [
-            session_id,
-            checkout_url,
-            email,
-            nome,
-            apelido,
-            offer_id,
-            itinerario,
-            companhia,
-            str(preco_exibido),
-            moeda_exibida,
-            str(valor_duffel_eur),
-            "PENDENTE",
-            "unpaid",
-            datetime.now().strftime("%d/%m/%Y %H:%M"),
-            "",
-            json.dumps(trechos, ensure_ascii=False),
-            json.dumps(pax_ids, ensure_ascii=False),
-        ]
+        if existente.data:
+            supabase.table("pagamentos").update(payload).eq("session_id", session_id).execute()
+        else:
+            supabase.table("pagamentos").insert(payload).execute()
 
-        for i, linha in enumerate(dados[1:], start=2):
-            if len(linha) > 0 and linha[0] == session_id:
-                aba.update(f"A{i}:Q{i}", [registro])
-                st.cache_data.clear()
-                return True
-
-        aba.append_row(registro)
-        st.cache_data.clear()
         return True
     except Exception as e:
         st.error(f"Erro ao registrar pagamento pendente: {e}")
@@ -540,24 +463,14 @@ def registrar_pagamento_pendente(
 
 
 def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
-    planilha = conectar_sheets()
-    if not planilha:
-        return False
-
     try:
-        aba = planilha.worksheet("Pagamentos")
-        dados = aba.get_all_values()
-
-        for i, linha in enumerate(dados[1:], start=2):
-            if len(linha) > 0 and linha[0] == session_id:
-                aba.update(f"L{i}:N{i}", [[
-                    "PAGO",
-                    stripe_payment_status,
-                    datetime.now().strftime("%d/%m/%Y %H:%M")
-                ]])
-                st.cache_data.clear()
-                return True
-        return False
+        supabase = conectar_supabase()
+        supabase.table("pagamentos").update({
+            "status_pagamento": "PAGO",
+            "stripe_payment_status": stripe_payment_status,
+            "data_confirmacao": datetime.utcnow().isoformat(),
+        }).eq("session_id", session_id).execute()
+        return True
     except Exception as e:
         st.error(f"Erro ao marcar pagamento como pago: {e}")
         return False
@@ -565,17 +478,15 @@ def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
 
 def obter_pagamento_por_session_id(session_id):
     try:
-        dados = ler_pagamentos()
-        if len(dados) <= 1:
-            return None
-
-        headers = dados[0]
-        for linha in dados[1:]:
-            if len(linha) > 0 and linha[0] == session_id:
-                while len(linha) < len(headers):
-                    linha.append("")
-                return dict(zip(headers, linha))
-        return None
+        supabase = conectar_supabase()
+        resp = (
+            supabase.table("pagamentos")
+            .select("*")
+            .eq("session_id", session_id)
+            .limit(1)
+            .execute()
+        )
+        return resp.data[0] if resp.data else None
     except Exception as e:
         st.error(f"Erro ao obter pagamento: {e}")
         return None
@@ -583,19 +494,17 @@ def obter_pagamento_por_session_id(session_id):
 
 def pagamento_confirmado(email, offer_id):
     try:
-        dados = ler_pagamentos()
-        for linha in dados[1:]:
-            if len(linha) < 12:
-                continue
-
-            email_pg = str(linha[2]).strip().lower()
-            offer_pg = str(linha[5]).strip()
-            status_pg = str(linha[11]).strip().lower()
-
-            if email_pg == email.strip().lower() and offer_pg == offer_id and status_pg == "pago":
-                return True
-
-        return False
+        supabase = conectar_supabase()
+        resp = (
+            supabase.table("pagamentos")
+            .select("id")
+            .eq("email", email.strip().lower())
+            .eq("offer_id", offer_id)
+            .eq("status_pagamento", "PAGO")
+            .limit(1)
+            .execute()
+        )
+        return len(resp.data) > 0
     except Exception:
         return False
 
@@ -605,37 +514,16 @@ def reconstruir_voo_por_session_id(session_id):
     if not pagamento:
         return None
 
-    try:
-        trechos = json.loads(pagamento.get("Trechos_JSON", "[]"))
-    except Exception:
-        trechos = []
-
-    try:
-        pax_ids = json.loads(pagamento.get("Pax_IDs_JSON", "[]"))
-    except Exception:
-        pax_ids = []
-
-    try:
-        preco_exibido = float(str(pagamento.get("Preco_Exibido", "0")).replace(",", "."))
-    except Exception:
-        preco_exibido = 0.0
-
-    try:
-        valor_duffel = float(str(pagamento.get("Valor_Duffel_EUR", "0")).replace(",", "."))
-    except Exception:
-        valor_duffel = 0.0
-
     return {
-        "id_offer": pagamento.get("Offer_ID", ""),
-        "Companhia": pagamento.get("Companhia", ""),
-        "Preço": preco_exibido,
-        "Moeda": pagamento.get("Moeda_Exibida", "€"),
-        "Trechos": trechos,
+        "id_offer": pagamento.get("offer_id", ""),
+        "Companhia": pagamento.get("companhia", ""),
+        "Preço": float(pagamento.get("preco_exibido") or 0),
+        "Moeda": pagamento.get("moeda_exibida", "€"),
+        "Trechos": pagamento.get("trechos_json", []) or [],
         "Internacional": False,
-        "valor_bruto_duffel": valor_duffel,
-        "pax_ids": pax_ids,
+        "valor_bruto_duffel": float(pagamento.get("valor_duffel_eur") or 0),
+        "pax_ids": pagamento.get("pax_ids_json", []) or [],
     }
-
 
 # =========================================================
 # EMAIL
@@ -1406,7 +1294,7 @@ elif st.session_state.pagina == "reserva":
                         itinerario_venda = itinerario_curto
                         valor_venda = money_fmt(v["Moeda"], v["Preço"])
 
-                        salvar_reserva_sheets(
+                        salvar_reserva_db(
                             f"{nome} {apelido}",
                             email,
                             pnr,
