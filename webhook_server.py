@@ -426,33 +426,114 @@ async def stripe_webhook(
     print(f"[WEBHOOK] Evento recebido: {event_type}")
 
     if event_type == "checkout.session.completed":
-        session_id = obj.get("id")
-        payment_status = obj.get("payment_status", "")
-        customer_email = obj.get("customer_email", "")
+    session_id = obj.get("id")
+    payment_status = obj.get("payment_status", "")
+    customer_email = obj.get("customer_email", "")
 
-        if not session_id:
-            print("[ERRO] session_id ausente no evento")
-            raise HTTPException(status_code=400, detail="session_id ausente")
+    if not session_id:
+        print("[ERRO] session_id ausente no evento")
+        raise HTTPException(status_code=400, detail="session_id ausente")
 
-        pagamento = obter_pagamento_por_session_id(session_id)
+    pagamento = obter_pagamento_por_session_id(session_id)
 
-        if not pagamento:
-            print(f"[INFO] Pagamento não encontrado no banco para session_id={session_id}")
-            return {"received": True, "warning": "pagamento não encontrado no banco"}
+    if not pagamento:
+        print(f"[INFO] Pagamento não encontrado no banco para session_id={session_id}")
+        return {"received": True, "warning": "pagamento não encontrado no banco"}
 
-        pagamento_ja_confirmado = str(pagamento.get("status_pagamento", "")).upper() == "PAGO"
+    if payment_status == "paid":
+        ok = marcar_pagamento_como_pago(session_id, payment_status)
 
-        if pagamento_ja_confirmado:
-            print(f"[INFO] Pagamento já confirmado anteriormente: {session_id}")
-        else:
-            ok = marcar_pagamento_como_pago(session_id, payment_status)
-            if ok:
-                print(f"[OK] Pagamento confirmado: {session_id} | email={customer_email}")
+        if ok:
+            print(f"[OK] Pagamento confirmado: {session_id} | email={customer_email}")
+
+            nome_cliente = f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip()
+            email_cliente = pagamento.get("email", "")
+            itinerario_pg = pagamento.get("itinerario", "")
+            companhia_pg = pagamento.get("companhia", "")
+            moeda_pg = pagamento.get("moeda_exibida", "€")
+            preco_pg = pagamento.get("preco_exibido", "0")
+
+            html_pagamento = montar_email_pagamento_recebido(
+                nome_cliente=nome_cliente if nome_cliente else "Cliente",
+                itinerario=itinerario_pg,
+                companhia=companhia_pg,
+                valor_total=f"{moeda_pg} {preco_pg}",
+            )
+
+            enviado = enviar_email(
+                destinatario=email_cliente,
+                assunto="Pagamento confirmado • Reserva em processamento",
+                corpo_html=html_pagamento,
+            )
+
+            if enviado:
+                print(f"[OK] Email de pagamento enviado para {email_cliente}")
             else:
-                print("[ERRO] Falha ao atualizar pagamento no Supabase")
-                raise HTTPException(status_code=500, detail="Falha ao atualizar pagamento")
+                print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
 
-        if payment_status == "paid":
+            emissao_status = (pagamento.get("emissao_status") or "pendente").lower()
+
+            if emissao_status == "emitido":
+                print(f"[INFO] Bilhete já emitido anteriormente para session_id={session_id}")
+            else:
+                marcar_emissao_status(session_id, "processando")
+
+                dados_ordem, erro_emissao = emitir_bilhete_duffel(pagamento)
+
+                if erro_emissao:
+                    marcar_emissao_status(session_id, "erro")
+                    print(f"[ERRO] Falha na emissão Duffel: {erro_emissao}")
+                else:
+                    pnr = dados_ordem.get("booking_reference", "")
+                    documentos = dados_ordem.get("documents", [])
+                    pdf_url = documentos[0]["url"] if documentos else ""
+
+                    marcar_emissao_status(session_id, "emitido", pnr=pnr, pdf_url=pdf_url)
+
+                    salvar_reserva_db(
+                        nome_completo=f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip(),
+                        email=pagamento.get("email", ""),
+                        pnr=pnr,
+                        itinerario=pagamento.get("itinerario", ""),
+                        valor=f"{moeda_pg} {preco_pg}",
+                        link_pdf=pdf_url,
+                    )
+
+                    email_bilhete_ja_enviado = bool(pagamento.get("email_bilhete_enviado", False))
+
+                    if email_bilhete_ja_enviado:
+                        print(f"[INFO] Email de bilhete já tinha sido enviado para {email_cliente}")
+                    else:
+                        trechos = pagamento.get("trechos_json") or []
+                        bagagem_info = None
+
+                        html_bilhete = montar_email_bilhete_emitido(
+                            nome_passageiro=f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip(),
+                            pnr=pnr,
+                            companhia=companhia_pg,
+                            itinerario=itinerario_pg,
+                            valor_total=f"{moeda_pg} {preco_pg}",
+                            trechos=trechos,
+                            bagagem_info=bagagem_info,
+                            pdf_url=pdf_url,
+                        )
+
+                        enviado_bilhete = enviar_email(
+                            destinatario=email_cliente,
+                            assunto=f"Bilhete emitido com sucesso • PNR {pnr}",
+                            corpo_html=html_bilhete,
+                        )
+
+                        if enviado_bilhete:
+                            marcar_email_bilhete_enviado(session_id)
+                            print(f"[OK] Email de bilhete enviado para {email_cliente}")
+                        else:
+                            print(f"[ERRO] Falha ao enviar email de bilhete para {email_cliente}")
+        else:
+            print("[ERRO] Falha ao atualizar pagamento no Supabase")
+            raise HTTPException(status_code=500, detail="Falha ao atualizar pagamento")
+    else:
+        print(f"[INFO] Evento recebido mas payment_status={payment_status}")
     ok = marcar_pagamento_como_pago(session_id, payment_status)
 
     if ok:
