@@ -758,7 +758,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerari
             preco_exibido=preco_exibido,
             moeda_exibida=moeda_exibida,
             valor_duffel_eur=valor_eur,
-            trechos=trechos
+            trechos=trechos,
             pax_ids=pax_ids
         )
         return session.url
