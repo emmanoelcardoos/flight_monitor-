@@ -394,17 +394,48 @@ if st.session_state.pagina == "busca":
         except Exception as e:
             st.error(f"Erro: {e}")
 
-    if st.session_state.resultados_voos:
-        st.write("### ✈️ Voos Encontrados")
-        for idx, v in enumerate(st.session_state.resultados_voos):
-            with st.expander(f"{v['Companhia']} - {v['Moeda']} {v['Preço']:.2f}", expanded=True):
-                for seg in v["Segmentos"]:
-                    col_a, col_b, col_c = st.columns(3)
-                    col_a.markdown(f"**🛫 {seg['de']}**\n{seg['partida']}")
-                    col_b.markdown(f"**🛬 {seg['para']}**\n{seg['chegada']}")
-                    col_c.markdown(f"**✈️ Aeronave**\n{seg['aviao']}")
+    # --- EXIBIÇÃO DOS RESULTADOS (DENTRO DA PÁGINA 1) ---
+if st.session_state.resultados_voos:
+    st.markdown(f"### 🔍 Encontramos {len(st.session_state.resultados_voos)} opções para você")
+    
+    # Ordenar por preço para garantir o melhor negócio no topo
+    st.session_state.resultados_voos.sort(key=lambda x: x['Preço'])
 
-                if st.button("Selecionar Voo", key=f"sel_{v['id_offer']}_{idx}"):
+    for idx, v in enumerate(st.session_state.resultados_voos):
+        with st.container(border=True):
+            col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
+
+            # Coluna 1: Companhia
+            col_logo.subheader(v['Companhia'])
+            
+            # Coluna 2: Resumo dos Horários
+            with col_info:
+                # Ida
+                ida = v['Trechos'][0]
+                st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
+                
+                # Volta (se houver)
+                if len(v['Trechos']) > 1:
+                    volta = v['Trechos'][1]
+                    st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
+                
+                # Detalhes escondidos em um Expander
+                with st.expander("Ver detalhes das escalas e aeronaves"):
+                    st.write("---")
+                    st.caption("TRECHO DE IDA")
+                    for s in ida:
+                        st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
+                    
+                    if len(v['Trechos']) > 1:
+                        st.write("---")
+                        st.caption("TRECHO DE VOLTA")
+                        for s in v['Trechos'][1]:
+                            st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
+
+            # Coluna 3: Preço e Seleção
+            with col_preco:
+                st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
+                if st.button("SELECIONAR", key=f"sel_{v['id_offer']}_{idx}", use_container_width=True, type="primary"):
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
