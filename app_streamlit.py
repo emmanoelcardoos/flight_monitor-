@@ -235,8 +235,6 @@ if st.session_state.pagina == "busca":
 
     st.title("✈️ Flight Monitor Trips")
 
-    paises_br = ["GRU", "CGH", "GIG", "SDU", "BSB", "CNF", "SSA", "REC", "FOR", "MAO", "BEL", "MAB", "STM", "CWB", "POA", "FLN"]
-
     opcoes_cidades = [
         "São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
         "Brasília (BSB)", "Belo Horizonte (CNF)",
@@ -256,22 +254,30 @@ if st.session_state.pagina == "busca":
         "Madrid (MAD)", "Barcelona (BCN)", "Valência (VLC)", "Sevilha (SVQ)",
         "Paris (CDG)", "Roma (FCO)", "Milão (MXP)", "Frankfurt (FRA)", "Londres (LHR)"
     ]
-
-    with st.form("busca_v14"):
+    
+    with st.form("busca_v15"):
+        # 1. Escolha do Tipo de Viagem
+        tipo_viagem = st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True)
 
         col1, col2 = st.columns(2)
-
         origem = col1.selectbox("Origem", opcoes_cidades)
         destino = col2.selectbox("Destino", opcoes_cidades)
 
+        col3, col4 = st.columns(2)
+        data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7))
+    
+    # 2. Data de Volta condicional
+        data_volta = None
+        if tipo_viagem == "Ida e Volta":
+            data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14))
+        else:
+            col4.info("Viagem só de ida")
+
         moeda_visu = col1.selectbox("Exibir preços em:", ["Real (R$)", "Euro (€)"])
-
-        data_ida = col2.date_input(
-            "Data de Partida",
-            value=datetime.today() + timedelta(days=7)
-        )
-
+    
         btn = st.form_submit_button("PESQUISAR VOOS")
+
+    
 
     if btn:
         st.session_state.busca_feita = True
@@ -291,19 +297,34 @@ if st.session_state.pagina == "busca":
                 iata_o = origem[-4:-1]
                 iata_d = destino[-4:-1]
 
+                fatias = [{
+                    "origin": iata_o,
+                    "destination": iata_d,
+                    "departure_date": str(data_ida)
+                }]
+
+                if tipo_viagem == "Ida e Volta" and data_volta:
+                    fatias.append({
+                        "origin": iata_d,
+                        "destination": iata_o,
+                        "departure_date": str(data_volta)
+                    })
+
                 is_intl = not (iata_o in paises_br and iata_d in paises_br)
+
 
                 payload = {
                     "data": {
-                        "slices": [{
-                            "origin": iata_o,
-                            "destination": iata_d,
-                            "departure_date": str(data_ida)
-                        }],
+                        "slices": fatias, # Agora usa a lista dinâmica
                         "passengers": [{"type": "adult"}],
                         "requested_currencies": ["EUR"]
-                    }
+                   }
                 }
+
+
+
+
+                
 
                 res = requests.post(
                     "https://api.duffel.com/air/offer_requests",
@@ -579,9 +600,17 @@ elif st.session_state.pagina == "reserva":
 
                         nome_completo = f"{nome} {apelido}"
                         itinerario_venda = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
+                        url_bilhete_individual = documentos[0]['url'] if documentos else ""
 
                         # CHAMADA ATUALIZADA COM O LINK DO PDF
-                        salvar_reserva_sheets(nome_completo, email, pnr, itinerario_venda, f"€ {v['Preço']:.2f}", link_pdf_oficial)
+                        salvar_reserva_sheets(
+                            f"{nome} {apelido}", 
+                            email, 
+                            pnr_gerado, 
+                            itinerario_venda, 
+                            f"€ {v['Preço']:.2f}", 
+                            url_bilhete_individual # <--- Link único guardado aqui
+                        )
 
 
                         try:
