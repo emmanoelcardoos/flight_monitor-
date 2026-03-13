@@ -15,7 +15,7 @@ from oauth2client.service_account import ServiceAccountCredentials
 # =========================================================
 # CONFIG GERAL
 # =========================================================
-COMISSAO_PERCENTUAL = 0.12
+COMISSAO_PERCENTUAL = 0.01
 WHATSAPP_SUPORTE = "351936797003"
 NOME_PLANILHA = "Alertas_Flight_Monitor"
 NOME_AGENCIA = "Flight Monitor Premium"
@@ -394,14 +394,14 @@ def garantir_abas():
         ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
     )
     obter_ou_criar_aba(
-        planilha,
-        "Pagamentos",
-        [
-            "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
-            "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
-            "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON"
-        ]
-    )
+    planilha,
+    "Pagamentos",
+    [
+        "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
+        "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
+        "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON", "Pax_IDs_JSON"
+    ]
+)
 
 
 def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
@@ -422,6 +422,41 @@ def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf
         st.error(f"Erro ao gravar reserva no Sheets: {e}")
         return False
 
+def reconstruir_voo_por_session_id(session_id):
+    pagamento = obter_pagamento_por_session_id(session_id)
+    if not pagamento:
+        return None
+
+    try:
+        trechos = json.loads(pagamento.get("Trechos_JSON", "[]"))
+    except Exception:
+        trechos = []
+
+    try:
+        pax_ids = json.loads(pagamento.get("Pax_IDs_JSON", "[]"))
+    except Exception:
+        pax_ids = []
+
+    try:
+        preco_exibido = float(str(pagamento.get("Preco_Exibido", "0")).replace(",", "."))
+    except Exception:
+        preco_exibido = 0.0
+
+    try:
+        valor_duffel = float(str(pagamento.get("Valor_Duffel_EUR", "0")).replace(",", "."))
+    except Exception:
+        valor_duffel = 0.0
+
+    return {
+        "id_offer": pagamento.get("Offer_ID", ""),
+        "Companhia": pagamento.get("Companhia", ""),
+        "Preço": preco_exibido,
+        "Moeda": pagamento.get("Moeda_Exibida", "€"),
+        "Trechos": trechos,
+        "Internacional": False,
+        "valor_bruto_duffel": valor_duffel,
+        "pax_ids": pax_ids,
+    }
 
 def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     planilha = conectar_sheets()
@@ -478,7 +513,7 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
         return False
 
 
-def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido, offer_id, itinerario, companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos):
+def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido, offer_id, itinerario, companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids):
     planilha = conectar_sheets()
     if not planilha:
         return False
@@ -509,7 +544,8 @@ def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido,
             session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
             companhia, str(preco_exibido), moeda_exibida, str(valor_duffel_eur),
             "PENDENTE", "unpaid", datetime.now().strftime("%d/%m/%Y %H:%M"), "",
-            json.dumps(trechos, ensure_ascii=False)
+            json.dumps(trechos, ensure_ascii=False),
+            json.dumps(pax_ids, ensure_ascii=False)
         ])
         return True
     except Exception as e:
@@ -678,7 +714,7 @@ def get_cotacao_ao_vivo():
         return 6.02
 
 
-def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id, companhia, preco_exibido, moeda_exibida, trechos):
+def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id, companhia, preco_exibido, moeda_exibida, trechos, pax_ids):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     base_url = st.secrets.get("APP_BASE_URL", "https://flightmonitorec.streamlit.app")
 
@@ -723,6 +759,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerari
             moeda_exibida=moeda_exibida,
             valor_duffel_eur=valor_eur,
             trechos=trechos
+            pax_ids=pax_ids
         )
         return session.url
     except Exception as e:
@@ -1296,7 +1333,9 @@ elif st.session_state.pagina == "reserva":
                         preco_exibido=v["Preço"],
                         moeda_exibida=v["Moeda"],
                         trechos=v["Trechos"],
+                        pax_ids=v.get("pax_ids", []),
                     )
+                    
                     if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
@@ -1441,7 +1480,16 @@ elif st.session_state.pagina == "sucesso":
 
                 col1, col2 = st.columns(2)
                 with col1:
-                    if st.button("Ir para emissão", use_container_width=True, type="primary"):
+                        if st.button("Ir para emissão", use_container_width=True, type="primary"):
+                            voo_reconstruido = reconstruir_voo_por_session_id(session_id)
+                            if voo_reconstruido:
+                                st.session_state.voo_selecionado = voo_reconstruido
+                                st.session_state.pagina = "reserva"
+                                st.rerun()
+                            else:
+                                st.error("Não foi possível recuperar os dados da reserva para continuar a emissão.")
+                                
+                    
                         st.session_state.pagina = "reserva"
                         st.rerun()
                 with col2:
