@@ -348,6 +348,20 @@ if st.session_state.pagina == "busca":
                     st.session_state.resultados_voos = []
 
                     for o in offers[:15]:
+                        fatias_voo = []
+                        # Percorremos as fatias da Duffel
+                        for slice_data in o["slices"]:
+                            segmentos_da_fatia = []
+                            for seg in slice_data["segments"]:
+                                segmentos_da_fatia.append({
+                                    "de": seg["origin"]["iata_code"],
+                                    "para": seg["destination"]["iata_code"],
+                                    "partida": seg["departing_at"].split("T")[1][:5],
+                                    "chegada": seg["arriving_at"].split("T")[1][:5],
+                                    "cia": seg["marketing_carrier"]["name"],
+                                    "aviao": seg["aircraft"]["name"] if seg["aircraft"] else "N/D"
+                                })
+                        fatias_voo.append(segmentos_da_fatia)
 
                         bagagem = "Verificar no Checkout"
                         if "passenger_conditions" in o:
@@ -393,6 +407,7 @@ if st.session_state.pagina == "busca":
                             "Internacional": is_intl,
                             "Moeda_Busca": moeda_visu,
                             "Data_Voo": data_ida
+                            "Trechos": fatias_voo
                         })
 
                     st.success(f"Cotação aplicada: 1€ = R$ {cotacao_atual:.2f}")
