@@ -9,3 +9,4 @@ storage3
 fastapi
 uvicorn
 python-multipart
+python-dotenv

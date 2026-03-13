@@ -570,57 +570,117 @@ def montar_email_pagamento_recebido(nome_cliente, itinerario, companhia, valor_t
     </html>
     """
 
-def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total, itinerario):
-    blocos = []
+def montar_email_bilhete_emitido(
+    nome_passageiro,
+    pnr,
+    companhia,
+    itinerario,
+    valor_total,
+    trechos,
+    bagagem_info=None,
+    pdf_url="",
+):
+    blocos_trechos = []
 
     for idx_fatia, fatia in enumerate(trechos, start=1):
-        blocos.append(f"""
-        <div style="margin: 0 0 12px 0; font-weight: bold; color: #003580;">Trecho {idx_fatia}</div>
-        """)
+        blocos_trechos.append(
+            f"""
+            <div style="margin: 0 0 12px 0; font-weight: bold; color: #003580; font-size: 16px;">
+                Trecho {idx_fatia}
+            </div>
+            """
+        )
 
         for seg in fatia:
-            blocos.append(f"""
-            <div style="padding: 14px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; background: #fafafa;">
-                <div style="font-weight: bold;">{seg['cia']}</div>
-                <div style="margin-top: 6px;"><b>{seg['de']}</b> ➔ <b>{seg['para']}</b></div>
-                <div style="margin-top: 4px; color: #666;">Partida: {seg['partida']} | Chegada: {seg['chegada']}</div>
-                <div style="margin-top: 4px; color: #666;">Aeronave: {seg['aviao']}</div>
-            </div>
-            """)
+            blocos_trechos.append(
+                f"""
+                <div style="padding: 14px; border: 1px solid #e5e7eb; border-radius: 10px; margin-bottom: 10px; background: #fafafa;">
+                    <div style="font-weight: bold; font-size: 15px;">{seg.get('cia', 'Companhia aérea')}</div>
+                    <div style="margin-top: 8px; font-size: 18px;">
+                        <strong>{seg.get('de', '---')}</strong> ➔ <strong>{seg.get('para', '---')}</strong>
+                    </div>
+                    <div style="margin-top: 6px; color: #555; font-size: 14px;">
+                        Partida: {seg.get('partida', '--:--')} &nbsp;|&nbsp;
+                        Chegada: {seg.get('chegada', '--:--')}
+                    </div>
+                    <div style="margin-top: 6px; color: #666; font-size: 13px;">
+                        Aeronave: {seg.get('aviao', 'N/D')}
+                    </div>
+                </div>
+                """
+            )
+
+    bagagem_html = ""
+    if bagagem_info:
+        bagagem_html = f"""
+        <div style="margin-top: 20px; padding: 16px; background:#f8fafc; border-radius:10px; border:1px solid #dbeafe;">
+            <h3 style="margin-top:0; color:#003580;">🧳 Bagagem</h3>
+            <p style="margin:0; font-size:15px; color:#333;">{bagagem_info}</p>
+        </div>
+        """
+    else:
+        bagagem_html = """
+        <div style="margin-top: 20px; padding: 16px; background:#f8fafc; border-radius:10px; border:1px solid #dbeafe;">
+            <h3 style="margin-top:0; color:#003580;">🧳 Bagagem</h3>
+            <p style="margin:0; font-size:15px; color:#333;">
+                A franquia de bagagem pode variar conforme a tarifa. Consulte as regras completas no bilhete emitido.
+            </p>
+        </div>
+        """
+
+    botao_pdf = ""
+    if pdf_url:
+        botao_pdf = f"""
+        <div style="margin-top: 24px; text-align:center;">
+            <a href="{pdf_url}" style="background:#003580; color:white; text-decoration:none; padding:14px 22px; border-radius:8px; display:inline-block; font-weight:bold;">
+                Baixar Bilhete / Itinerário
+            </a>
+        </div>
+        """
 
     return f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;">
-        <div style="max-width: 680px; margin: auto; background: white; border-radius: 12px; overflow: hidden;">
-            <div style="background: linear-gradient(135deg, #003580, #0057b8); color: white; padding: 26px;">
-                <h1 style="margin:0;">✈️ Bilhete emitido com sucesso</h1>
-                <p style="margin-top:8px;">Olá, {nome}. A sua viagem está confirmada.</p>
+        <div style="max-width: 700px; margin: auto; background: white; border-radius: 12px; overflow: hidden; box-shadow: 0 8px 24px rgba(0,0,0,0.08);">
+            
+            <div style="background: linear-gradient(135deg, #003580, #0057b8); color: white; padding: 28px;">
+                <h1 style="margin:0; font-size: 32px;">✈️ Bilhete Emitido</h1>
+                <p style="margin-top:10px; font-size:18px;">Olá, {nome_passageiro}. A sua viagem está confirmada.</p>
             </div>
 
             <div style="padding: 24px;">
-                <p><strong>PNR:</strong> {pnr}</p>
-                <p><strong>Itinerário:</strong> {itinerario}</p>
-                <p><strong>Companhia:</strong> {companhia}</p>
-                <p><strong>Valor pago:</strong> {valor_total}</p>
-
-                <h3 style="color:#003580;">Detalhes do voo</h3>
-                {''.join(blocos)}
-
-                <div style="margin-top: 20px; padding: 16px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0;">
-                    <strong>Informações importantes:</strong><br>
-                    Chegue ao aeroporto com antecedência mínima de 3 horas em voos internacionais e 2 horas em voos domésticos.<br>
-                    Tenha os seus documentos em mãos no momento do embarque.
+                <div style="padding: 16px; border: 1px solid #e5e7eb; border-radius: 10px; background: #fcfcfc;">
+                    <p style="margin: 0 0 10px 0; font-size:15px;"><strong>Passageiro:</strong> {nome_passageiro}</p>
+                    <p style="margin: 0 0 10px 0; font-size:15px;"><strong>PNR:</strong> {pnr}</p>
+                    <p style="margin: 0 0 10px 0; font-size:15px;"><strong>Companhia:</strong> {companhia}</p>
+                    <p style="margin: 0 0 10px 0; font-size:15px;"><strong>Itinerário:</strong> {itinerario}</p>
+                    <p style="margin: 0; font-size:15px;"><strong>Valor pago:</strong> {valor_total}</p>
                 </div>
+
+                <h3 style="margin-top:24px; color:#003580;">📍 Detalhes do Voo</h3>
+                {''.join(blocos_trechos)}
+
+                {bagagem_html}
+
+                <div style="margin-top: 20px; padding: 16px; background:#fff7ed; border-radius:10px; border:1px solid #fed7aa;">
+                    <h3 style="margin-top:0; color:#9a3412;">📌 Próximos passos</h3>
+                    <ul style="padding-left:18px; margin:0; color:#333; line-height:1.6;">
+                        <li>Verifique os documentos necessários para embarque.</li>
+                        <li>Chegue ao aeroporto com antecedência.</li>
+                        <li>Consulte o check-in diretamente com a companhia aérea.</li>
+                    </ul>
+                </div>
+
+                {botao_pdf}
             </div>
 
-            <div style="padding: 18px; text-align:center; background:#111827; color:#d1d5db; font-size: 12px;">
-                © {datetime.now().year} {NOME_AGENCIA}
+            <div style="padding: 18px; text-align:center; background:#0f172a; color:#d1d5db; font-size: 12px;">
+                © {datetime.now().year} Flight Monitor Premium
             </div>
         </div>
     </body>
     </html>
     """
-
 
 # =========================================================
 # APIS EXTERNAS
@@ -1330,13 +1390,17 @@ elif st.session_state.pagina == "reserva":
                             link_pdf_oficial
                         )
 
-                        html_design = montar_email_confirmacao(
-                            nome=f"{nome} {apelido}",
+                        bagagem_info = None  # por enquanto; depois podemos enriquecer com dados reais da Duffel
+
+                        html_design = montar_email_bilhete_emitido(
+                            nome_passageiro=f"{nome} {apelido}",
                             pnr=pnr,
                             companhia=v["Companhia"],
-                            trechos=trechos,
+                            itinerario=itinerario_venda,
                             valor_total=valor_venda,
-                            itinerario=itinerario_venda
+                            trechos=trechos,
+                            bagagem_info=bagagem_info,
+                            pdf_url=link_pdf_oficial,
                         )
 
                         enviar_email(
