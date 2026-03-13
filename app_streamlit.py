@@ -435,6 +435,12 @@ def registrar_pagamento_pendente(
             "stripe_payment_status": "unpaid",
             "trechos_json": trechos,
             "pax_ids_json": pax_ids,
+        "titulo": titulo,
+        "genero": genero,
+        "data_nascimento": data_nascimento,
+        "documento": documento,
+        "passaporte": passaporte,
+        "validade_passaporte": validade_passaporte,
             "titulo": titulo,
             "genero": genero,
             "data_nascimento": data_nascimento,
@@ -1301,7 +1307,12 @@ elif st.session_state.pagina == "reserva":
                     st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
                     st.session_state["pax_nome"] = nome_pax.strip()
                     st.session_state["pax_apelido"] = apelido_pax.strip()
-                    st.session_state["pax_email"] = email_pax.strip()
+                    st.session_state["pax_email"] = email_pax
+                st.session_state["pax_data_nascimento"] = str(nasc_pax)
+                st.session_state["pax_nascimento"] = str(nasc_pax)
+                st.session_state["pax_documento"] = documento_id
+                st.session_state["pax_passaporte"] = passaporte
+                st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
                     st.session_state["pax_documento"] = documento_id.strip()
                     st.session_state["pax_nascimento"] = str(nasc_pax)
                     st.session_state["pax_passaporte"] = passaporte.strip()
@@ -1345,7 +1356,7 @@ elif st.session_state.pagina == "reserva":
                          pax_ids=v.get("pax_ids", []),
                          titulo=st.session_state.get("pax_titulo"),
                          genero=st.session_state.get("pax_genero"),
-                         data_nascimento=st.session_state.get("pax_data_nascimento"),
+                         data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
                          documento=st.session_state.get("pax_documento"),
                          passaporte=st.session_state.get("pax_passaporte"),
                          validade_passaporte=st.session_state.get("pax_validade_passaporte"),
