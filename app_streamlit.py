@@ -1257,6 +1257,16 @@ elif st.session_state.pagina == "reserva":
 
             c1, c2 = st.columns(2)
             nome_pax = c1.text_input("Nome", value=st.session_state.get("pax_nome", ""))
+            # garantir valores padrão necessários para emissão Duffel
+            if "pax_titulo" not in st.session_state:
+                st.session_state["pax_titulo"] = "mr"
+
+            if "pax_genero" not in st.session_state:
+                st.session_state["pax_genero"] = "m"
+
+            apelido_pax = c2.text_input("Apelido / Sobrenome", value=st.session_state.get("pax_apelido", ""))
+
+            email_pax = st.text_input("E-mail", value=st.session_state.get("pax_email", ""))
             apelido_pax = c2.text_input("Apelido / Sobrenome", value=st.session_state.get("pax_apelido", ""))
 
             email_pax = st.text_input("E-mail", value=st.session_state.get("pax_email", ""))
@@ -1303,21 +1313,21 @@ elif st.session_state.pagina == "reserva":
                     for erro in erros:
                         st.error(erro)
                 else:
-                    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
-                    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
-                    st.session_state["pax_nome"] = nome_pax.strip()
-                    st.session_state["pax_apelido"] = apelido_pax.strip()
-                    st.session_state["pax_email"] = email_pax
-                    st.session_state["pax_data_nascimento"] = str(nasc_pax)
-                    st.session_state["pax_nascimento"] = str(nasc_pax)
-                    st.session_state["pax_documento"] = documento_id
-                    st.session_state["pax_passaporte"] = passaporte
-                    st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
-                    st.session_state["pax_documento"] = documento_id.strip()
-                    st.session_state["pax_nascimento"] = str(nasc_pax)
-                    st.session_state["pax_passaporte"] = passaporte.strip()
+                    st.session_state["pax_nome"] = nome_pax.strip() if nome_pax else ""
+                    st.session_state["pax_apelido"] = apelido_pax.strip() if apelido_pax else ""
+                    st.session_state["pax_email"] = email_pax.strip() if email_pax else ""
+
+                    st.session_state["pax_data_nascimento"] = str(nasc_pax) if nasc_pax else ""
+                    st.session_state["pax_nascimento"] = str(nasc_pax) if nasc_pax else ""
+
+                    st.session_state["pax_documento"] = documento_id.strip() if documento_id else ""
+                    st.session_state["pax_passaporte"] = passaporte.strip() if passaporte else ""
                     st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
-                    st.success("Dados validados com sucesso.")
+
+                    st.session_state["pax_titulo"] = st.session_state.get("pax_titulo", "mr")
+                    st.session_state["pax_genero"] = st.session_state.get("pax_genero", "m")
+
+    st.success("Dados validados com sucesso.")
 
     with col_resumo:
         st.markdown("### 💳 Resumo e Pagamento")
@@ -1332,6 +1342,7 @@ elif st.session_state.pagina == "reserva":
             st.session_state.get("pax_nome"),
             st.session_state.get("pax_apelido"),
             st.session_state.get("pax_email"),
+            st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
         ])
 
         email_pax_atual = st.session_state.get("pax_email", "")
