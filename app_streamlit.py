@@ -402,6 +402,8 @@ if st.session_state.resultados_voos:
     st.session_state.resultados_voos.sort(key=lambda x: x['Preço'])
 
     for idx, v in enumerate(st.session_state.resultados_voos):
+        if 'Trechos' not in v:
+            continue
         with st.container(border=True):
             col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
 
