@@ -426,9 +426,10 @@ async def stripe_webhook(
     print(f"[WEBHOOK] Evento recebido: {event_type}")
 
     if event_type == "checkout.session.completed":
-    session_id = obj.get("id")
-    payment_status = obj.get("payment_status", "")
-    customer_email = obj.get("customer_email", "")
+      
+      session_id = obj.get("id")
+      payment_status = obj.get("payment_status", "")
+      customer_email = obj.get("customer_email", "")
 
     if not session_id:
         print("[ERRO] session_id ausente no evento")
