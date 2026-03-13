@@ -1303,20 +1303,20 @@ elif st.session_state.pagina == "reserva":
                     for erro in erros:
                         st.error(erro)
                 else:
-    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
-    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
-    st.session_state["pax_nome"] = nome_pax.strip()
-    st.session_state["pax_apelido"] = apelido_pax.strip()
-    st.session_state["pax_email"] = email_pax
-    st.session_state["pax_data_nascimento"] = str(nasc_pax)
-    st.session_state["pax_nascimento"] = str(nasc_pax)
-    st.session_state["pax_documento"] = documento_id
-    st.session_state["pax_passaporte"] = passaporte
-    st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
-    st.session_state["pax_documento"] = documento_id.strip()
-    st.session_state["pax_nascimento"] = str(nasc_pax)
-    st.session_state["pax_passaporte"] = passaporte.strip()
-    st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
+                    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
+                    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
+                    st.session_state["pax_nome"] = nome_pax.strip()
+                    st.session_state["pax_apelido"] = apelido_pax.strip()
+                    st.session_state["pax_email"] = email_pax
+                    st.session_state["pax_data_nascimento"] = str(nasc_pax)
+                    st.session_state["pax_nascimento"] = str(nasc_pax)
+                    st.session_state["pax_documento"] = documento_id
+                    st.session_state["pax_passaporte"] = passaporte
+                    st.session_state["pax_validade_passaporte"] = str(val_passaporte) if val_passaporte else "".strip()
+                    st.session_state["pax_documento"] = documento_id.strip()
+                    st.session_state["pax_nascimento"] = str(nasc_pax)
+                    st.session_state["pax_passaporte"] = passaporte.strip()
+                    st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
                     st.success("Dados validados com sucesso.")
 
     with col_resumo:
