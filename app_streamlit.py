@@ -8,7 +8,6 @@ import stripe
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from supabase import create_client
-from supabase.lib.client_options import ClientOptions
 
 
 # =========================================================
@@ -337,14 +336,7 @@ def money_fmt(moeda: str, valor: float) -> str:
 def conectar_supabase():
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_SERVICE_ROLE_KEY"]
-    return create_client(
-        url,
-        key,
-        options=ClientOptions(
-            auto_refresh_token=False,
-            persist_session=False,
-        ),
-    )
+    return create_client(url, key)
 
 
 def salvar_reserva_db(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
