@@ -339,7 +339,7 @@ if st.session_state.pagina == "busca":
                     offers = res.json()["data"].get("offers", [])
                     st.session_state.resultados_voos = []
 
-                    for o in offers[:5]:
+                    for o in offers[:15]:
 
                         bagagem = "Verificar no Checkout"
                         if "passenger_conditions" in o:
