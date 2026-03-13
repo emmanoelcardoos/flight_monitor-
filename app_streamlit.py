@@ -287,19 +287,7 @@ if st.session_state.pagina == "busca":
                     else:
                         st.error("Erro ao gravar na folha de Alertas.")
 
-elif st.session_state.pagina == "reserva":
-    v = st.session_state.get('voo_selecionado')
-    if not v: st.session_state.pagina = "busca"; st.rerun()
-    st.info(f"✈️ **Voo:** {v['Companhia']}")
-    st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
-    with st.form("pax_data"):
-        nome = st.text_input("Nome")
-        apelido = st.text_input("Apelido")
-        email = st.text_input("E-mail")
-        dn = st.date_input("Data Nascimento", value=datetime(1995, 1, 1))
-        if st.form_submit_button("Gerar Pagamento"):
-            url = criar_checkout_stripe(v['valor_bruto_duffel'], nome, email, v['Companhia'], v['id_offer'])
-            if url: st.link_button("Pagar Agora", url)
+
 
 elif st.session_state.pagina == "login":
     st.title("✈️ Área do Passageiro")
@@ -314,37 +302,93 @@ elif st.session_state.pagina == "login":
 # --- PÁGINA 2: RESERVA ---
 elif st.session_state.pagina == "reserva":
     v = st.session_state.get('voo_selecionado')
-    params = st.query_params
+    if not v: 
+        st.session_state.pagina = "busca"
+        st.rerun()
 
-    # 1. RECUPERAÇÃO DE DADOS DA URL (Evita o reset da sessão)
-    status_pagamento = params.get("pagamento")
-    email_url = params.get("email")
-    nome_url = params.get("nome")
+    st.title("🏁 Finalizar Reserva")
+    
+    with st.container(border=True):
+        st.info(f"✈️ **Voo:** {v['Companhia']} | **Total:** {v['Moeda']} {v['Preço']:.2f}")
+    
+    col_dados, col_resumo = st.columns([2, 1])
 
-    # 2. SEÇÃO DE E-MAIL 1: IMEDIATO PÓS-PAGAMENTO
-    if status_pagamento == "sucesso" and "email_1_enviado" not in st.session_state:
-        destinatario = email_url if email_url else st.session_state.get('pax_email')
-        nome_pax = nome_url if nome_url else st.session_state.get('pax_nome', 'Passageiro')
+    with col_dados:
+        # --- MORADA FISCAL ---
+        st.subheader("🏠 Dados da Morada Fiscal")
+        rua = st.text_input("Rua")
+        c_bairro, c_cid = st.columns(2)
+        bairro = c_bairro.text_input("Bairro")
+        cidade_f = c_cid.text_input("Cidade")
+        c_cep, c_est = st.columns(2)
+        cep_f = c_cep.text_input("CEP / Código Postal")
+        estado_f = c_est.text_input("Estado / Distrito")
 
-        if destinatario:
-            with st.spinner("Confirmando pagamento e enviando e-mail..."):
-                assunto = "Recebemos seu pagamento! ✈️ - Flight Monitor"
-                corpo = f"""
-                <div style="font-family: sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
-                    <h2 style="color: #003580;">Olá {nome_pax}, recebemos o seu pagamento!</h2>
-                    <p>Obrigado por escolher a <b>Flight Monitor</b>.</p>
-                    <p>Seu pagamento foi aprovado com sucesso via Stripe. Agora, nossa equipe está processando a emissão do seu bilhete junto à companhia aérea.</p>
-                    <p><b>O que acontece agora?</b> Em instantes, após a emissão ser concluída, você receberá um <b>segundo e-mail</b> contendo o seu código de reserva (PNR) e os detalhes do embarque.</p>
-                    <hr>
-                    <p style="font-size: 12px; color: #666;">Este é um e-mail automático de confirmação de transação.</p>
-                </div>
-                """
-                if enviar_email(destinatario, assunto, corpo):
-                    st.session_state["email_1_enviado"] = True
-                    st.session_state["pago"] = True
-                    st.balloons()
-                    st.success(f"✅ Pagamento confirmado! E-mail de processamento enviado para {destinatario}")
+        st.divider()
 
+        # --- DADOS DO PASSAGEIRO ---
+        st.subheader("👤 Dados do Passageiro (Obrigatórios Duffel)")
+        with st.form("form_pax_v20"):
+            # Título e Gênero (Requisitos Duffel)
+            c_tit, c_gen = st.columns(2)
+            titulo_input = c_tit.selectbox("Título", ["Senhor", "Senhora"])
+            genero_input = c_gen.selectbox("Gênero", ["Masculino", "Feminino"])
+            
+            c1, c2 = st.columns(2)
+            nome_pax = c1.text_input("Nome", value=st.session_state.get('pax_nome', ''))
+            apelido_pax = c2.text_input("Apelido / Sobrenome", value=st.session_state.get('pax_apelido', ''))
+            
+            email_pax = st.text_input("E-mail", value=st.session_state.get('pax_email', ''))
+            
+            c3, c4 = st.columns(2)
+            documento_id = c3.text_input("CPF / Cartão de Cidadão")
+            nasc_pax = c4.date_input("Data de Nascimento", value=datetime(1995, 1, 1))
+            
+            # Lógica de Passaporte
+            precisa_passaporte = v.get("Internacional", False)
+            if precisa_passaporte:
+                st.warning("⚠️ Voo Internacional: Passaporte Obrigatório")
+                cp1, cp2 = st.columns(2)
+                passaporte = cp1.text_input("Número do Passaporte")
+                val_passaporte = cp2.date_input("Validade do Passaporte", value=datetime.today() + timedelta(days=365))
+            else:
+                passaporte, val_passaporte = "N/A", None
+
+            salvar = st.form_submit_button("✅ VALIDAR DADOS", use_container_width=True)
+            
+            if salvar:
+                if not nome_pax or not email_pax or not documento_id:
+                    st.error("Preencha os campos obrigatórios!")
+                else:
+                    # Mapeamento para o formato da API Duffel
+                    st.session_state['pax_titulo'] = "mr" if titulo_input == "Senhor" else "mrs"
+                    st.session_state['pax_genero'] = "m" if genero_input == "Masculino" else "f"
+                    
+                    st.session_state['pax_nome'] = nome_pax
+                    st.session_state['pax_apelido'] = apelido_pax
+                    st.session_state['pax_email'] = email_pax
+                    st.session_state['pax_documento'] = documento_id
+                    st.session_state['pax_passaporte'] = passaporte
+                    st.success("Dados validados para a Duffel!")
+
+    with col_resumo:
+        st.subheader("💳 Pagamento")
+        if st.session_state.get('pax_email'):
+            url_checkout = criar_checkout_stripe(
+                v['valor_bruto_duffel'], 
+                st.session_state['pax_nome'], 
+                st.session_state['pax_email'], 
+                v['Companhia'],
+                v['id_offer']
+            )
+            if url_checkout:
+                st.link_button("🚀 PAGAR AGORA", url_checkout, type="primary", use_container_width=True)
+        else:
+            st.warning("Valide os dados do passageiro para pagar.")
+
+    if st.button("⬅️ Voltar"):
+        st.session_state.pagina = "busca"
+        st.rerun()
     # 3. PROTEÇÃO CONTRA TELA VERMELHA (NoneType)
     if v is None:
         v = {
