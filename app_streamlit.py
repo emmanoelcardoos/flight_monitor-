@@ -693,7 +693,7 @@ elif st.session_state.pagina == "login":
         c1, c2, c3 = st.columns(3)
         c1.metric("Localizador (PNR)", res['PNR'])
         c2.metric("Status", res['Status'])
-        c3.metric("Total Pago", res['Valor Pago'])
+        c3.metric("Total Pago", res['Valor'])
 
         st.info(f"📍 **Itinerário:** {res['Itinerário']}")
 
