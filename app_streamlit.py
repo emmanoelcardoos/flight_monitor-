@@ -839,9 +839,7 @@ if "pagamento_confirmado_atual" not in st.session_state:
     st.session_state.pagamento_confirmado_atual = False
 if "tema_visual" not in st.session_state:
     st.session_state.tema_visual = "Sky Light"
-if "abas_inicializadas" not in st.session_state:
-    garantir_abas()
-    st.session_state.abas_inicializadas = True
+
 
 tema_url = st.query_params.get("tema")
 if tema_url in obter_temas():
