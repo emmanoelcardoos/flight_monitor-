@@ -235,6 +235,8 @@ if st.session_state.pagina == "busca":
 
     st.title("✈️ Flight Monitor Trips")
 
+    paises_br = ["BR", "PT", "FR", "US", "ES", "GB"]
+
     opcoes_cidades = [
         "São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
         "Brasília (BSB)", "Belo Horizonte (CNF)",
@@ -254,31 +256,30 @@ if st.session_state.pagina == "busca":
         "Madrid (MAD)", "Barcelona (BCN)", "Valência (VLC)", "Sevilha (SVQ)",
         "Paris (CDG)", "Roma (FCO)", "Milão (MXP)", "Frankfurt (FRA)", "Londres (LHR)"
     ]
+
+    tipo_v= st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True, key="tipo_viagem_radio")
     
-    with st.form("busca_v15"):
+    with st.form("busca_v17"):
         # 1. Escolha do Tipo de Viagem
-        tipo_viagem = st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True)
 
         col1, col2 = st.columns(2)
         origem = col1.selectbox("Origem", opcoes_cidades)
         destino = col2.selectbox("Destino", opcoes_cidades)
 
         col3, col4 = st.columns(2)
-        data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7), key="data_ida_input")
+        data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7))
     
     # 2. Data de Volta condicional
         data_volta = None
-        if tipo_viagem == "Ida e Volta":
+        if tipo_v == "Ida e Volta":
             data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14), key="data_volta_input" )
         else:
             col4.info("Viagem só de ida")
             data_volta = None
 
         moeda_visu = col1.selectbox("Exibir preços em:", ["Real (R$)", "Euro (€)"])
-    
-        btn = st.form_submit_button("PESQUISAR VOOS")
+        btn = st.form_submit_button("PESQUISAR VOOS", use_container_width=True)
 
-    
 
     if btn:
         st.session_state.busca_feita = True
@@ -304,7 +305,7 @@ if st.session_state.pagina == "busca":
                     "departure_date": str(data_ida)
                 }]
 
-                if tipo_viagem == "Ida e Volta" and data_volta:
+                if tipo_v == "Ida e Volta" and data_volta:
                     fatias.append({
                         "origin": iata_d,
                         "destination": iata_o,
