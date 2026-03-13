@@ -17,29 +17,16 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     if planilha:
         try:
             aba = planilha.worksheet("Reservas_Confirmadas")
-            # Pegamos todos os valores brutos para evitar erro de cabeçalho
             dados = aba.get_all_values() 
-            
-            # Se a planilha tiver apenas o cabeçalho ou estiver vazia
             if len(dados) <= 1:
                 return None
-                
-            # Percorremos as linhas ignorando o cabeçalho (linha 1)
             for linha in dados[1:]:
-                # Ordem esperada na planilha:
-                # A=Email, B=PNR, C=Passageiro, D=Data, E=Itinerário, F=Valor, G=Status, H=PDF
-                
-                # Verificamos se a linha tem pelo menos Email e PNR antes de comparar
                 if len(linha) < 2:
                     continue
-                    
                 email_planilha = str(linha[0]).strip().lower()
                 pnr_planilha = str(linha[1]).strip().upper()
-
                 if email_planilha == email_cliente.strip().lower() and \
                    pnr_planilha == pnr_cliente.strip().upper():
-                    
-                    # Retornamos o dicionário com todos os campos, incluindo o PDF (índice 7)
                     return {
                         "Email": linha[0],
                         "PNR": linha[1],
@@ -48,7 +35,7 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
                         "Itinerário": linha[4] if len(linha) > 4 else "",
                         "Valor": linha[5] if len(linha) > 5 else "€ 0.00",
                         "Status": linha[6] if len(linha) > 6 else "Confirmado",
-                        "PDF": linha[7] if len(linha) > 7 else "" # Coluna H
+                        "PDF": linha[7] if len(linha) > 7 else "" 
                     }
             return None
         except Exception as e:
@@ -58,16 +45,13 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
 def conectar_sheets():
     try:
         scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        # Certifica-te que 'gspread' está configurado nos Secrets do Streamlit
         creds_dict = st.secrets["gspread"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        # USA O NOME EXATO DA TUA FOLHA
         return client.open("Alertas_Flight_Monitor")
     except Exception as e:
         st.error(f"Erro ao conectar ao Google Sheets: {e}")
         return None
-    
 
 def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
     planilha = conectar_sheets()
@@ -75,18 +59,7 @@ def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf
         try:
             aba = planilha.worksheet("Reservas_Confirmadas")
             data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
-            
-            # Adicionamos o link_pdf na última coluna (Coluna H)
-            aba.append_row([
-                email,           # A
-                pnr,             # B
-                nome_completo,   # C
-                data_hora,       # D
-                itinerario,      # E
-                valor,           # F
-                "Emitido",       # G
-                link_pdf         # H (NOVA COLUNA)
-            ])
+            aba.append_row([email, pnr, nome_completo, data_hora, itinerario, valor, "Emitido", link_pdf])
             return True
         except Exception as e:
             st.error(f"Erro ao gravar no Sheets: {e}")
@@ -96,10 +69,7 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
     planilha = conectar_sheets()
     if planilha:
         try:
-            # Pega a primeira aba (aba 1)
             aba = planilha.get_worksheet(0) 
-            # Segue a ordem das colunas da sua foto: 
-            # email, itinerario, origem, destino, data, data_volta, adultos, criancas, bebes, preco_inicial, moeda
             nova_linha = [email, itinerario, origem, destino, str(data_ida), "", 1, 0, 0, preco_inicial, moeda]
             aba.append_row(nova_linha)
             return True
@@ -108,7 +78,6 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
             return False
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
-    import stripe
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     try:
         session = stripe.checkout.Session.create(
@@ -122,7 +91,6 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
                 'quantity': 1,
             }],
             mode='payment',
-            # AQUI: Adicionamos o e-mail e o nome na URL de retorno
             success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&email={email_pax}&nome={nome_pax}",
             cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
             customer_email=email_pax,
@@ -133,21 +101,14 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
         return None
     
 def enviar_email(destinatario, assunto, corpo_html):
-    import smtplib
-    from email.mime.multipart import MIMEMultipart
-    from email.mime.text import MIMEText
-
     try:
-        # ATENÇÃO: Verifique se esses nomes batem com suas Secrets
         remetente = st.secrets["EMAIL_USER"]
         senha = st.secrets["EMAIL_PASSWORD"]
-        
         msg = MIMEMultipart()
         msg['From'] = remetente
         msg['To'] = destinatario
         msg['Subject'] = assunto
         msg.attach(MIMEText(corpo_html, 'html'))
-
         server = smtplib.SMTP('smtp.gmail.com', 587)
         server.starttls()
         server.login(remetente, senha)
@@ -158,12 +119,9 @@ def enviar_email(destinatario, assunto, corpo_html):
         st.error(f"Erro ao enviar e-mail: {e}")
         return False
 
-
-# --- CONFIGURAÇÃO DE NEGÓCIO ---
 COMISSAO_PERCENTUAL = 0.12 
 WHATSAPP_SUPORTE = "351936797003" 
 
-# --- FUNÇÃO: CÂMBIO AO VIVO ---
 def get_cotacao_ao_vivo():
     try:
         res = requests.get("https://economia.awesomeapi.com.br/last/EUR-BRL")
@@ -175,34 +133,19 @@ def get_cotacao_ao_vivo():
 
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
 
-# --- LOGO ABAIXO DAS SUAS OUTRAS FUNÇÕES ---
-
 def criar_intencao_pagamento(valor_eur):
     try:
         api_token = st.secrets["DUFFEL_TOKEN"]
-        headers = {
-            "Authorization": f"Bearer {api_token}",
-            "Duffel-Version": "v2",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "data": {
-                "amount": f"{valor_eur:.2f}",
-                "currency": "EUR"
-            }
-        }
+        headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+        payload = {"data": {"amount": f"{valor_eur:.2f}", "currency": "EUR"}}
         res = requests.post("https://api.duffel.com/payments/payment_intents", headers=headers, json=payload)
         return res.json()
     except Exception as e:
         return {"errors": [{"message": str(e)}]}
-    
-    
 
-# --- ESTADOS ---
 if 'pagina' not in st.session_state:
     st.session_state.pagina = "busca"
 
-# --- RASTREADOR GLOBAL DE RETORNO DO STRIPE ---
 if st.query_params.get("pagamento") in ["sucesso", "cancelado"]:
     st.session_state.pagina = "reserva"
     if st.query_params.get("pagamento") == "sucesso":
@@ -210,353 +153,132 @@ if st.query_params.get("pagamento") in ["sucesso", "cancelado"]:
 
 if 'voo_selecionado' not in st.session_state:
     st.session_state.voo_selecionado = None
-
 if 'busca_feita' not in st.session_state:
     st.session_state.busca_feita = False
-
 if 'resultados_voos' not in st.session_state:
     st.session_state.resultados_voos = []
 
-# --- SIDEBAR ---
 with st.sidebar:
     st.title("📌 Flight Monitor")
     if st.button("🔍 Procurar Voos"):
         st.session_state.pagina = "busca"
-
     if st.button("👤 Área do Cliente"):
         st.session_state.pagina = "login"
-
     st.divider()
     st.markdown(f"**Suporte:** [WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
 
-
-# --- PÁGINA 1: BUSCA ---
-
-# --- LIMPEZA DE MEMÓRIA (Coloque no topo da Página 1) ---
-if st.button("Limpar Cache e Nova Busca"):
-    st.session_state.resultados_voos = []
-    st.session_state.busca_feita = False
-    st.rerun()
-
-
 if st.session_state.pagina == "busca":
+    if st.button("Limpar Cache e Nova Busca"):
+        st.session_state.resultados_voos = []
+        st.session_state.busca_feita = False
+        st.rerun()
 
     st.title("✈️ Flight Monitor Trips")
-
     paises_br = ["BR", "PT", "FR", "US", "ES", "GB"]
+    opcoes_cidades = ["São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)", "Brasília (BSB)", "Belo Horizonte (CNF)", "Salvador (SSA)", "Recife (REC)", "Fortaleza (FOR)", "Natal (NAT)", "Maceió (MCZ)", "João Pessoa (JPA)", "Aracaju (AJU)", "Porto Alegre (POA)", "Curitiba (CWB)", "Florianópolis (FLN)", "Cuiabá (CGB)", "Campo Grande (CGR)", "Goiânia (GYN)", "Belém (BEL)", "Manaus (MAO)", "Macapá (MCP)", "Boa Vista (BVB)", "Porto Velho (PVH)", "Rio Branco (RBR)", "Palmas (PMW)", "São Luís (SLZ)", "Teresina (THE)", "Vitória (VIX)", "Campinas (VCP)", "Foz do Iguaçu (IGU)", "Navegantes (NVT)", "Joinville (JOI)", "Ilhéus (IOS)", "Porto Seguro (BPS)", "Chapecó (XAP)", "Uberlândia (UDI)", "Montes Claros (MOC)", "Imperatriz (IMP)", "Marabá (MAB)", "Santarém (STM)", "Lisboa (LIS)", "Porto (OPO)", "Faro (FAO)", "Funchal (FNC)", "Ponta Delgada (PDL)", "Madrid (MAD)", "Barcelona (BCN)", "Valência (VLC)", "Sevilha (SVQ)", "Paris (CDG)", "Roma (FCO)", "Milão (MXP)", "Frankfurt (FRA)", "Londres (LHR)"]
 
-    opcoes_cidades = [
-        "São Paulo (GRU)", "São Paulo (CGH)", "Rio de Janeiro (GIG)", "Rio de Janeiro (SDU)",
-        "Brasília (BSB)", "Belo Horizonte (CNF)",
-        "Salvador (SSA)", "Recife (REC)", "Fortaleza (FOR)", "Natal (NAT)",
-        "Maceió (MCZ)", "João Pessoa (JPA)", "Aracaju (AJU)",
-        "Porto Alegre (POA)", "Curitiba (CWB)", "Florianópolis (FLN)",
-        "Cuiabá (CGB)", "Campo Grande (CGR)", "Goiânia (GYN)",
-        "Belém (BEL)", "Manaus (MAO)", "Macapá (MCP)", "Boa Vista (BVB)",
-        "Porto Velho (PVH)", "Rio Branco (RBR)", "Palmas (PMW)",
-        "São Luís (SLZ)", "Teresina (THE)",
-        "Vitória (VIX)", "Campinas (VCP)",
-        "Foz do Iguaçu (IGU)", "Navegantes (NVT)", "Joinville (JOI)",
-        "Ilhéus (IOS)", "Porto Seguro (BPS)", "Chapecó (XAP)",
-        "Uberlândia (UDI)", "Montes Claros (MOC)",
-        "Imperatriz (IMP)", "Marabá (MAB)", "Santarém (STM)",
-        "Lisboa (LIS)", "Porto (OPO)", "Faro (FAO)", "Funchal (FNC)", "Ponta Delgada (PDL)",
-        "Madrid (MAD)", "Barcelona (BCN)", "Valência (VLC)", "Sevilha (SVQ)",
-        "Paris (CDG)", "Roma (FCO)", "Milão (MXP)", "Frankfurt (FRA)", "Londres (LHR)"
-    ]
-
-    tipo_v= st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True, key="tipo_viagem_radio")
-    
+    tipo_v = st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True, key="tipo_viagem_radio")
     with st.form("busca_v17"):
-        # 1. Escolha do Tipo de Viagem
-
         col1, col2 = st.columns(2)
         origem = col1.selectbox("Origem", opcoes_cidades)
         destino = col2.selectbox("Destino", opcoes_cidades)
-
         col3, col4 = st.columns(2)
         data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7))
-    
-    # 2. Data de Volta condicional
         data_volta = None
         if tipo_v == "Ida e Volta":
-            data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14), key="data_volta_input" )
+            data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14), key="data_volta_input")
         else:
             col4.info("Viagem só de ida")
-            data_volta = None
-
         moeda_visu = col1.selectbox("Exibir preços em:", ["Real (R$)", "Euro (€)"])
         btn = st.form_submit_button("PESQUISAR VOOS", use_container_width=True)
 
-
     if btn:
         st.session_state.busca_feita = True
-
         try:
             with st.spinner('Em busca dos melhores voos!'):
-
                 cotacao_atual = get_cotacao_ao_vivo()
                 api_token = st.secrets["DUFFEL_TOKEN"]
-
-                headers = {
-                    "Authorization": f"Bearer {api_token}",
-                    "Duffel-Version": "v2",
-                    "Content-Type": "application/json"
-                }
-
-                iata_o = origem[-4:-1]
-                iata_d = destino[-4:-1]
-
-                fatias = [{
-                    "origin": iata_o,
-                    "destination": iata_d,
-                    "departure_date": str(data_ida)
-                }]
-
+                headers = {"Authorization": f"Bearer {api_token}", "Duffel-Version": "v2", "Content-Type": "application/json"}
+                iata_o, iata_d = origem[-4:-1], destino[-4:-1]
+                fatias = [{"origin": iata_o, "destination": iata_d, "departure_date": str(data_ida)}]
                 if tipo_v == "Ida e Volta" and data_volta:
-                    fatias.append({
-                        "origin": iata_d,
-                        "destination": iata_o,
-                        "departure_date": str(data_volta)
-                    })
-
+                    fatias.append({"origin": iata_d, "destination": iata_o, "departure_date": str(data_volta)})
                 is_intl = not (iata_o in paises_br and iata_d in paises_br)
-
-
-                payload = {
-                    "data": {
-                        "slices": fatias, # Agora usa a lista dinâmica
-                        "passengers": [{"type": "adult"}],
-                        "requested_currencies": ["EUR"]
-                   }
-                }
-
-
-
-
-                
-
-                res = requests.post(
-                    "https://api.duffel.com/air/offer_requests",
-                    headers=headers,
-                    json=payload
-                )
-
+                payload = {"data": {"slices": fatias, "passengers": [{"type": "adult"}], "requested_currencies": ["EUR"]}}
+                res = requests.post("https://api.duffel.com/air/offer_requests", headers=headers, json=payload)
                 if res.status_code == 201:
-
                     offers = res.json()["data"].get("offers", [])
                     st.session_state.resultados_voos = []
-
                     for o in offers[:15]:
                         fatias_voo = []
-                        # Percorremos as fatias da Duffel
                         for slice_data in o["slices"]:
-                            segmentos_da_fatia = []
+                            segs_fatia = []
                             for seg in slice_data["segments"]:
-                                segmentos_da_fatia.append({
-                                    "de": seg["origin"]["iata_code"],
-                                    "para": seg["destination"]["iata_code"],
-                                    "partida": seg["departing_at"].split("T")[1][:5],
-                                    "chegada": seg["arriving_at"].split("T")[1][:5],
-                                    "cia": seg["marketing_carrier"]["name"],
-                                    "aviao": seg["aircraft"]["name"] if seg["aircraft"] else "N/D"
+                                segs_fatia.append({
+                                    "de": seg["origin"]["iata_code"], "para": seg["destination"]["iata_code"],
+                                    "partida": seg["departing_at"].split("T")[1][:5], "chegada": seg["arriving_at"].split("T")[1][:5],
+                                    "cia": seg["marketing_carrier"]["name"], "aviao": seg["aircraft"]["name"] if seg["aircraft"] else "N/D"
                                 })
-                        fatias_voo.append(segmentos_da_fatia)
-
-                        bagagem = "Verificar no Checkout"
-                        if "passenger_conditions" in o:
-                            bagagem = "Incluída" if o["passenger_conditions"].get("baggage_allowance") else "Apenas item pessoal"
-
-                        segmentos = []
-
-                        for s_slice in o["slices"]:
-                            segs = s_slice["segments"]
-
-                            for i, seg in enumerate(segs):
-                                conexao = {"cidade": seg["destination"]["city_name"]} if i < len(segs) - 1 else None
-
-                                segmentos.append({
-                                    "de": seg["origin"]["iata_code"],
-                                    "para": seg["destination"]["iata_code"],
-                                    "partida": seg["departing_at"].split("T")[1][:5],
-                                    "chegada": seg["arriving_at"].split("T")[1][:5],
-                                    "cia": seg["marketing_carrier"]["name"],
-                                    "aviao": seg["aircraft"]["name"] if seg["aircraft"] else "N/D",
-                                    "conexao": conexao
-                                })
-
+                            fatias_voo.append(segs_fatia)
+                        
                         valor_eur = float(o["total_amount"])
-
-                        if "Real" in moeda_visu:
-                            v_final = valor_eur * cotacao_atual * (1 + COMISSAO_PERCENTUAL)
-                            moeda_txt = "R$"
-                        else:
-                            v_final = valor_eur * (1 + COMISSAO_PERCENTUAL)
-                            moeda_txt = "€"
-
+                        v_final = valor_eur * cotacao_atual * (1.12) if "Real" in moeda_visu else valor_eur * (1.12)
                         st.session_state.resultados_voos.append({
-                            "id_offer": o["id"],
-                            "valor_bruto_duffel": o["total_amount"],
-                            "pax_ids": [p["id"] for p in res.json()["data"]["passengers"]],
-                            "Companhia": o["owner"]["name"],
-                            "Preço": v_final,
-                            "Moeda": moeda_txt,
-                            "Bagagem": bagagem,
-                            "Segmentos": segmentos,
-                            "Cotacao_Usada": cotacao_atual,
-                            "Internacional": is_intl,
-                            "Moeda_Busca": moeda_visu,
-                            "Data_Voo": data_ida
-                            
+                            "id_offer": o["id"], "Companhia": o["owner"]["name"], "Preço": v_final,
+                            "Moeda": "R$" if "Real" in moeda_visu else "€", "Trechos": fatias_voo,
+                            "valor_bruto_duffel": o["total_amount"], "pax_ids": [p["id"] for p in res.json()["data"]["passengers"]]
                         })
-
-                    st.success(f"Cotação aplicada: 1€ = R$ {cotacao_atual:.2f}")
-                else:
-                    st.error("Erro na API da Duffel. Verifique seu Token.")
-
+                    st.rerun()
         except Exception as e:
             st.error(f"Erro: {e}")
 
-    # --- EXIBIÇÃO DOS RESULTADOS (DENTRO DA PÁGINA 1) ---
-if st.session_state.resultados_voos:
-    st.markdown(f"### 🔍 Encontramos {len(st.session_state.resultados_voos)} opções para você")
-    
-    # Ordenar por preço para garantir o melhor negócio no topo
-    st.session_state.resultados_voos.sort(key=lambda x: x['Preço'])
-
-    for idx, v in enumerate(st.session_state.resultados_voos):
-        if 'Trechos' not in v:
-            continue
-        with st.container(border=True):
-            col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
-
-            # Coluna 1: Companhia
-            col_logo.subheader(v['Companhia'])
-            
-            # Coluna 2: Resumo dos Horários
-            with col_info:
-                # Ida
-                ida = v['Trechos'][0]
-                st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
-                
-                # Volta (se houver)
-                if len(v['Trechos']) > 1:
-                    volta = v['Trechos'][1]
-                    st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
-                
-                # Detalhes escondidos em um Expander
-                with st.expander("Ver detalhes das escalas e aeronaves"):
-                    st.write("---")
-                    st.caption("TRECHO DE IDA")
-                    for s in ida:
-                        st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
-                    
-                    if len(v['Trechos']) > 1:
-                        st.write("---")
-                        st.caption("TRECHO DE VOLTA")
-                        for s in v['Trechos'][1]:
-                            st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
-
-            # Coluna 3: Preço e Seleção
-            with col_preco:
-                st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
-                if st.button("SELECIONAR", key=f"sel_{v['id_offer']}_{idx}", use_container_width=True, type="primary"):
-                    st.session_state.voo_selecionado = v
-                    st.session_state.pagina = "reserva"
-                    st.rerun()
-        # --- BLOCO DE ALERTA DE PREÇO NA PÁGINA 1 ---
-        st.divider()
-        st.subheader("🔔 Não Encontrou o Preço que Querias?\n Inscreva-se nos nossos alertas e receba notificaçoes no teu email sempre que o preco do teu voo baixar!")
-        with st.expander("Criar Alerta de Preço"):
-            col_al1, col_al2 = st.columns([2, 1])
-            email_alerta = col_al1.text_input("Seu e-mail para o alerta", key="email_alerta_input")
-            
-            # Pegamos o menor preço da busca atual
-            menor_preco = st.session_state.resultados_voos[0]['Preço']
-            moeda_txt = st.session_state.resultados_voos[0]['Moeda']
-            
-            if st.button("Ativar Alerta de Preço", use_container_width=True):
-                if email_alerta:
-                    itinerario_txt = f"{origem} para {destino}"
-                    # Chamada da função com os dados da sua planilha
-                    sucesso = salvar_alerta_preco(
-                        email_alerta, 
-                        itinerario_txt, 
-                        origem, 
-                        destino, 
-                        data_ida, 
-                        menor_preco, 
-                        moeda_txt
-                    )
-                    if sucesso:
-                        st.success(f"✅ Alerta Guardado! Avisaremos quando o preço do seu voo baixar para o seguinte email: {email_alerta}")
-                    else:
-                        st.error("Erro ao gravar na folha. Verifique as permissões.")
-        # =========================================================
-
-    if st.session_state.get('busca_feita'): 
+    if st.session_state.busca_feita and st.session_state.resultados_voos:
         st.markdown(f"### 🔍 Encontramos {len(st.session_state.resultados_voos)} opções")
-
-
-        # Ordenação por preço
         st.session_state.resultados_voos.sort(key=lambda x: x['Preço'])
-
-        
-
         for idx, v in enumerate(st.session_state.resultados_voos):
-
             trechos = v.get('Trechos')
-            if not trechos or not isinstance(trechos, list):
-             continue
-
-
+            if not trechos: continue
             with st.container(border=True):
                 col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
-
-                with col_logo:
-                    st.subheader(v.get('Companhia', 'Aérea'))
-                
+                col_logo.subheader(v['Companhia'])
                 with col_info:
-                    # Exibição resumida da IDA
-
                     ida = trechos[0]
-                    origem_p = ida[0].get('de', 'N/D')
-                    destino_p = ida[-1].get('para', 'N/D')
-                    st.markdown(f"**🛫 Ida:** {origem_p} ➔ {destino_p}")
-
-
-
-                    # Exibição resumida da VOLTA (se existir)
-                    if len(v['Trechos']) > 1:
-
+                    st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
+                    if len(trechos) > 1:
                         volta = trechos[1]
-                        origem_v = volta[0].get('de', 'N/D')
-                        destino_v = volta[-1].get('para', 'N/D')
-                        st.markdown(f"**🛬 Volta:** {origem_v} ➔ {destino_v}")
-                        
-                    
-                    # Detalhes em expander (Design Limpo)
+                        st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
                     with st.expander("Ver escalas e aeronaves"):
-                        st.caption("DETALHES DA IDA")
-                        for s in ida:
-                            st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
-                        
-                        if len(v['Trechos']) > 1:
-                            st.divider()
-                            st.caption("DETALHES DA VOLTA")
-                            for s in v['Trechos'][1]:
-                                st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
-
+                        for i, t in enumerate(trechos):
+                            st.caption(f"TRECHO {i+1}")
+                            for s in t: st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
                 with col_preco:
+                    st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
+                    if st.button("SELECIONAR", key=f"sel_{idx}", use_container_width=True, type="primary"):
+                        st.session_state.voo_selecionado, st.session_state.pagina = v, "reserva"
+                        st.rerun()
 
-                    preco_v = v.get('Preço', 0)
-                    moeda_v = v.get('Moeda', '€')
-                    st.subheader(f"{moeda_v} {preco_v:.2f}")
-                
-                if st.button("SELECIONAR", key=f"btn_res_final_{idx}"):
-                    st.session_state.voo_selecionado = v
-                    st.session_state.pagina = "reserva"
-                    st.rerun()
+elif st.session_state.pagina == "reserva":
+    v = st.session_state.get('voo_selecionado')
+    if not v: st.session_state.pagina = "busca"; st.rerun()
+    st.info(f"✈️ **Voo:** {v['Companhia']}")
+    st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
+    with st.form("pax_data"):
+        nome = st.text_input("Nome")
+        apelido = st.text_input("Apelido")
+        email = st.text_input("E-mail")
+        dn = st.date_input("Data Nascimento", value=datetime(1995, 1, 1))
+        if st.form_submit_button("Gerar Pagamento"):
+            url = criar_checkout_stripe(v['valor_bruto_duffel'], nome, email, v['Companhia'], v['id_offer'])
+            if url: st.link_button("Pagar Agora", url)
+
+elif st.session_state.pagina == "login":
+    st.title("✈️ Área do Passageiro")
+    email_l = st.text_input("E-mail")
+    pnr_l = st.text_input("PNR")
+    if st.button("Buscar"):
+        res = buscar_reserva_por_pnr(email_l, pnr_l)
+        if res: st.write(res)
+        else: st.error("Não encontrado")
 
 
 # --- PÁGINA 2: RESERVA ---
