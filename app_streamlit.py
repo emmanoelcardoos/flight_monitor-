@@ -231,6 +231,14 @@ with st.sidebar:
 
 
 # --- PÁGINA 1: BUSCA ---
+
+# --- LIMPEZA DE MEMÓRIA (Coloque no topo da Página 1) ---
+if st.button("Limpar Cache e Nova Busca"):
+    st.session_state.resultados_voos = []
+    st.session_state.busca_feita = False
+    st.rerun()
+
+    
 if st.session_state.pagina == "busca":
 
     st.title("✈️ Flight Monitor Trips")
