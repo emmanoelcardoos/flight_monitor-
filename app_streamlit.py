@@ -469,8 +469,53 @@ if st.session_state.resultados_voos:
                         st.error("Erro ao gravar na folha. Verifique as permissões.")
         # =========================================================
 
-    elif st.session_state.get('busca_feita'): 
-        st.warning("Nenhum voo encontrado para estes critérios.")
+    if st.session_state.get('busca_feita'): 
+        st.markdown(f"### 🔍 Encontramos {len(st.session_state.resultados_voos)} opções")
+
+
+        # Ordenação por preço
+        st.session_state.resultados_voos.sort(key=lambda x: x['Preço'])
+
+        
+
+        for idx, v in enumerate(st.session_state.resultados_voos):
+            with st.container(border=True):
+                col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
+
+                with col_logo:
+                    st.subheader(v['Companhia'])
+                
+                with col_info:
+                    # Exibição resumida da IDA
+                    ida = v['Trechos'][0]
+                    st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
+                    
+                    # Exibição resumida da VOLTA (se existir)
+                    if len(v['Trechos']) > 1:
+                        volta = v['Trechos'][1]
+                        st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
+                    
+                    # Detalhes em expander (Design Limpo)
+                    with st.expander("Ver escalas e aeronaves"):
+                        st.caption("DETALHES DA IDA")
+                        for s in ida:
+                            st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
+                        
+                        if len(v['Trechos']) > 1:
+                            st.divider()
+                            st.caption("DETALHES DA VOLTA")
+                            for s in v['Trechos'][1]:
+                                st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
+
+                with col_preco:
+                    st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
+                    if st.button("SELECIONAR", key=f"sel_{v['id_offer']}_{idx}", use_container_width=True, type="primary"):
+                        st.session_state.voo_selecionado = v
+                        st.session_state.pagina = "reserva"
+                        st.rerun()
+
+
+
         
         
         
