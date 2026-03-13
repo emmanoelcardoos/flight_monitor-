@@ -132,6 +132,8 @@ def get_cotacao_ao_vivo():
         return 6.02
 
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
+if st.query_params.get("pagamento") == "sucesso":
+    st.session_state.pagina = "sucesso"
 
 def criar_intencao_pagamento(valor_eur):
     try:
@@ -308,13 +310,19 @@ elif st.session_state.pagina == "reserva":
 
     st.title("🏁 Finalizar Reserva")
     
-    with st.container(border=True):
-        st.info(f"✈️ **Voo:** {v['Companhia']} | **Total:** {v['Moeda']} {v['Preço']:.2f}")
+    # CORREÇÃO DO ERRO 'Segmentos' -> 'Trechos'
+    trechos = v.get('Trechos', [])
+    if trechos:
+        ida = trechos[0]
+        origem_p = ida[0]['de']
+        destino_p = ida[-1]['para']
+        st.info(f"✈️ **Voo:** {v['Companhia']} | **Trecho:** {origem_p} ➔ {destino_p}")
+    
+    st.metric(label="Valor a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
     
     col_dados, col_resumo = st.columns([2, 1])
 
     with col_dados:
-        # --- MORADA FISCAL ---
         st.subheader("🏠 Dados da Morada Fiscal")
         rua = st.text_input("Rua")
         c_bairro, c_cid = st.columns(2)
@@ -326,10 +334,8 @@ elif st.session_state.pagina == "reserva":
 
         st.divider()
 
-        # --- DADOS DO PASSAGEIRO ---
-        st.subheader("👤 Dados do Passageiro (Obrigatórios Duffel)")
-        with st.form("form_pax_v20"):
-            # Título e Gênero (Requisitos Duffel)
+        st.subheader("👤 Dados do Passageiro")
+        with st.form("form_pax_final"):
             c_tit, c_gen = st.columns(2)
             titulo_input = c_tit.selectbox("Título", ["Senhor", "Senhora"])
             genero_input = c_gen.selectbox("Gênero", ["Masculino", "Feminino"])
@@ -342,49 +348,39 @@ elif st.session_state.pagina == "reserva":
             
             c3, c4 = st.columns(2)
             documento_id = c3.text_input("CPF / Cartão de Cidadão")
-            nasc_pax = c4.date_input("Data de Nascimento", value=datetime(1995, 1, 1))
             
-            # Lógica de Passaporte
+            # CORREÇÃO DO CALENDÁRIO: min_value e max_value expandidos
+            nasc_pax = c4.date_input(
+                "Data de Nascimento", 
+                value=datetime(1995, 1, 1),
+                min_value=datetime(1920, 1, 1),
+                max_value=datetime.today()
+            )
+            
             precisa_passaporte = v.get("Internacional", False)
             if precisa_passaporte:
                 st.warning("⚠️ Voo Internacional: Passaporte Obrigatório")
                 cp1, cp2 = st.columns(2)
                 passaporte = cp1.text_input("Número do Passaporte")
-                val_passaporte = cp2.date_input("Validade do Passaporte", value=datetime.today() + timedelta(days=365))
+                val_passaporte = cp2.date_input("Validade", value=datetime.today() + timedelta(days=365))
             else:
                 passaporte, val_passaporte = "N/A", None
 
-            salvar = st.form_submit_button("✅ VALIDAR DADOS", use_container_width=True)
-            
-            if salvar:
-                if not nome_pax or not email_pax or not documento_id:
-                    st.error("Preencha os campos obrigatórios!")
-                else:
-                    # Mapeamento para o formato da API Duffel
-                    st.session_state['pax_titulo'] = "mr" if titulo_input == "Senhor" else "mrs"
-                    st.session_state['pax_genero'] = "m" if genero_input == "Masculino" else "f"
-                    
-                    st.session_state['pax_nome'] = nome_pax
-                    st.session_state['pax_apelido'] = apelido_pax
-                    st.session_state['pax_email'] = email_pax
-                    st.session_state['pax_documento'] = documento_id
-                    st.session_state['pax_passaporte'] = passaporte
-                    st.success("Dados validados para a Duffel!")
+            if st.form_submit_button("✅ VALIDAR DADOS"):
+                st.session_state['pax_titulo'] = "mr" if titulo_input == "Senhor" else "mrs"
+                st.session_state['pax_genero'] = "m" if genero_input == "Masculino" else "f"
+                st.session_state['pax_nome'] = nome_pax
+                st.session_state['pax_email'] = email_pax
+                st.success("Dados validados!")
 
     with col_resumo:
         st.subheader("💳 Pagamento")
         if st.session_state.get('pax_email'):
-            url_checkout = criar_checkout_stripe(
-                v['valor_bruto_duffel'], 
-                st.session_state['pax_nome'], 
-                st.session_state['pax_email'], 
-                v['Companhia'],
-                v['id_offer']
-            )
+            url_checkout = criar_checkout_stripe(v['valor_bruto_duffel'], nome_pax, email_pax, v['Companhia'], v['id_offer'])
             if url_checkout:
                 st.link_button("🚀 PAGAR AGORA", url_checkout, type="primary", use_container_width=True)
         else:
-            st.warning("Valide os dados do passageiro para pagar.")
+            st.warning("Valide os dados ao lado.")
 
     if st.button("⬅️ Voltar"):
         st.session_state.pagina = "busca"
@@ -679,3 +675,35 @@ elif st.session_state.pagina == "login":
         with col_btn3:
             if st.button("❌ Cancelar Viagem", type="secondary", use_container_width=True):
                 st.error("Atenção: Cancelamentos dependem das regras da companhia aérea.")
+
+
+# --- PÁGINA 4: SUCESSO PÓS-PAGAMENTO ---
+elif st.session_state.pagina == "sucesso":
+    st.balloons()
+    st.success("### 🎉 Pagamento Confirmado com Sucesso!")
+    
+    # Captura dados da URL enviados pela Stripe para personalizar a mensagem
+    nome_sucesso = st.query_params.get('nome', 'Passageiro')
+    email_sucesso = st.query_params.get('email', 'seu e-mail')
+    
+    with st.container(border=True):
+        st.markdown(f"""
+        **Olá {nome_sucesso},**
+        
+        Recebemos o seu pagamento com sucesso através da Stripe. 
+        
+        ✈️ **Próximos passos:**
+        1. Nossa equipe e os sistemas da companhia aérea estão a processar a emissão do seu bilhete.
+        2. Você receberá em instantes um e-mail em **{email_sucesso}** com o seu código de reserva e o itinerário completo.
+        3. Caso não receba o e-mail em até 15 minutos, verifique sua caixa de spam ou entre em contacto com o nosso suporte.
+        4. Todos os voos feitos na Flight&Fun podem ser elegiveis a verificação de dados manuais,\n caso isso ocorra, receberás um aviso por email e seu voo será emitido em até 24 horas após a confirmação dos seus dados e repesctivo pagamento.
+        """)
+        
+        st.link_button("💬 Duvidas? Fale com o Nosso Suporte (WhatsApp)", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
+    
+    st.divider()
+    if st.button("Voltar para a Página Inicial", use_container_width=True):
+        st.session_state.pagina = "busca"
+        st.session_state.busca_feita = False
+        st.session_state.resultados_voos = []
+        st.rerun()
