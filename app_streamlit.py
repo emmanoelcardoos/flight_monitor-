@@ -541,6 +541,34 @@ def enviar_email(destinatario, assunto, corpo_html):
         st.error(f"Erro ao enviar e-mail: {e}")
         return False
 
+def montar_email_pagamento_recebido(nome_cliente, itinerario, companhia, valor_total):
+    return f"""
+    <html>
+    <body style="font-family: Arial, sans-serif; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;">
+        <div style="max-width: 680px; margin: auto; background: white; border-radius: 12px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #003580, #0057b8); color: white; padding: 26px;">
+                <h1 style="margin:0;">✅ Pagamento Recebido</h1>
+                <p style="margin-top:8px;">Olá, {nome_cliente}. O seu pagamento foi confirmado com sucesso.</p>
+            </div>
+
+            <div style="padding: 24px;">
+                <p><strong>Itinerário:</strong> {itinerario}</p>
+                <p><strong>Companhia:</strong> {companhia}</p>
+                <p><strong>Valor:</strong> {valor_total}</p>
+
+                <div style="margin-top: 20px; padding: 16px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0;">
+                    Recebemos o seu pagamento e a sua reserva está agora em processamento.<br><br>
+                    O seu bilhete e o localizador (PNR) serão enviados por e-mail assim que a emissão for concluída.
+                </div>
+            </div>
+
+            <div style="padding: 18px; text-align:center; background:#111827; color:#d1d5db; font-size: 12px;">
+                © {datetime.now().year} {NOME_AGENCIA}
+            </div>
+        </div>
+    </body>
+    </html>
+    """
 
 def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total, itinerario):
     blocos = []
@@ -1102,8 +1130,17 @@ elif st.session_state.pagina == "reserva":
     v = st.session_state.get("voo_selecionado")
 
     if not v:
-        st.session_state.pagina = "busca"
-        st.rerun()
+        session_id_restaurar = st.session_state.get("session_id_pagamento_atual", "")
+        if session_id_restaurar:
+            v = reconstruir_voo_por_session_id(session_id_restaurar)
+            if v:
+                st.session_state.voo_selecionado = v
+            else:
+                st.session_state.pagina = "busca"
+                st.rerun()
+        else:
+            st.session_state.pagina = "busca"
+            st.rerun()
 
     trechos = v.get("Trechos", [])
     if not trechos:
@@ -1354,8 +1391,30 @@ elif st.session_state.pagina == "sucesso":
             pagamento = obter_pagamento_por_session_id(session_id)
 
             if payment_status == "paid":
+                st.session_state["session_id_pagamento_atual"] = session_id
                 marcar_pagamento_como_pago(session_id, stripe_payment_status=payment_status)
                 st.session_state.pagamento_confirmado_atual = True
+
+                if pagamento:
+                    nome_cliente = f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip()
+                    email_cliente_db = pagamento.get("email", "")
+                    itinerario_pg = pagamento.get("itinerario", "")
+                    companhia_pg = pagamento.get("companhia", "")
+                    moeda_pg = pagamento.get("moeda_exibida", "€")
+                    preco_pg = pagamento.get("preco_exibido", "0")
+
+                    html_pagamento = montar_email_pagamento_recebido(
+                        nome_cliente=nome_cliente if nome_cliente else "Cliente",
+                        itinerario=itinerario_pg,
+                        companhia=companhia_pg,
+                        valor_total=f"{moeda_pg} {preco_pg}",
+                    )
+
+                    enviar_email(
+                        destinatario=email_cliente_db,
+                        assunto="Pagamento confirmado • Reserva em processamento",
+                        corpo_html=html_pagamento,
+                    )
 
                 st.success("✅ Pagamento confirmado com sucesso.")
                 st.write(f"**Estado Stripe:** {checkout_status}")
@@ -1375,12 +1434,19 @@ elif st.session_state.pagina == "sucesso":
                 with col1:
                     if st.button("Ir para emissão", use_container_width=True, type="primary"):
                         voo_reconstruido = reconstruir_voo_por_session_id(session_id)
+
                         if voo_reconstruido:
-                            st.session_state.voo_selecionado = voo_reconstruido
-                            st.session_state.pagina = "reserva"
+                            st.session_state["voo_selecionado"] = voo_reconstruido
+                            st.session_state["pagamento_confirmado_atual"] = True
+                            st.session_state["session_id_pagamento_atual"] = session_id
+                            st.session_state["pax_email"] = pagamento.get("email", "")
+                            st.session_state["pax_nome"] = pagamento.get("nome", "")
+                            st.session_state["pax_apelido"] = pagamento.get("apelido", "")
+                            st.session_state["pagina"] = "reserva"
                             st.rerun()
                         else:
                             st.error("Não foi possível recuperar os dados da reserva para continuar a emissão.")
+                
 
                 with col2:
                     if st.button("Voltar ao início", use_container_width=True):
