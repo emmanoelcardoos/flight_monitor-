@@ -12,19 +12,36 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
 
-
 def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     planilha = conectar_sheets()
     if planilha:
         try:
             aba = planilha.worksheet("Reservas_Confirmadas")
-            todas_as_reservas = aba.get_all_records() # Lê a tabela toda
+            # Em vez de get_all_records, pegamos todos os valores brutos
+            dados = aba.get_all_values() 
             
-            for reserva in todas_as_reservas:
-                # Verificamos se o PNR e o Email coincidem
-                if str(reserva['PNR']).strip().upper() == pnr_cliente.strip().upper() and \
-                   reserva['Email'].strip().lower() == email_cliente.strip().lower():
-                    return reserva # Retorna os dados da linha encontrada
+            # Se a planilha estiver vazia (só o cabeçalho ou nem isso)
+            if len(dados) <= 1:
+                return None
+                
+            # Pulamos a primeira linha (cabeçalho) e percorremos as outras
+            for linha in dados[1:]:
+                # Assumindo a ordem: A=Email, B=PNR, C=Passageiro...
+                email_planilha = str(linha[0]).strip().lower()
+                pnr_planilha = str(linha[1]).strip().upper()
+                
+                if email_planilha == email_cliente.strip().lower() and \
+                   pnr_planilha == pnr_cliente.strip().upper():
+                    # Retornamos um dicionário organizado
+                    return {
+                        "Email": linha[0],
+                        "PNR": linha[1],
+                        "Passageiro": linha[2],
+                        "Data": linha[3] if len(linha) > 3 else "",
+                        "Itinerário": linha[4] if len(linha) > 4 else "",
+                        "Valor": linha[5] if len(linha) > 5 else "",
+                        "Status": linha[6] if len(linha) > 6 else "Confirmado"
+                    }
             return None
         except Exception as e:
             st.error(f"Erro ao buscar na base de dados: {e}")
@@ -363,7 +380,7 @@ if st.session_state.pagina == "busca":
                     st.rerun()
         # --- BLOCO DE ALERTA DE PREÇO NA PÁGINA 1 ---
         st.divider()
-        st.subheader("🔔 Não encontrou o preço ideal?")
+        st.subheader("🔔 Não Encontrou o Preço que Querias?\n Inscreva-se nos nossos alertas e receba notificaçoes no teu email sempre que o preco do teu voo baixar!")
         with st.expander("Criar Alerta de Preço"):
             col_al1, col_al2 = st.columns([2, 1])
             email_alerta = col_al1.text_input("Seu e-mail para o alerta", key="email_alerta_input")
@@ -386,7 +403,7 @@ if st.session_state.pagina == "busca":
                         moeda_txt
                     )
                     if sucesso:
-                        st.success(f"✅ Alerta guardado na folha! Avisaremos em {email_alerta}")
+                        st.success(f"✅ Alerta Guardado! Avisaremos quando o preço do seu voo baixar para o seguinte email: {email_alerta}")
                     else:
                         st.error("Erro ao gravar na folha. Verifique as permissões.")
         # =========================================================
@@ -547,6 +564,23 @@ elif st.session_state.pagina == "reserva":
                         pnr = res_ordem.json()['data']['booking_reference']
                         itinerario_venda = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
                         salvar_reserva_sheets(f"{nome} {apelido}", email, pnr, itinerario_venda, v['Preço'])
+                        nome_completo = f"{nome} {apelido}"
+                        valor_venda = f"€ {v['Preço']:.2f}"
+
+                        try:
+                            sucesso_sheets = salvar_reserva_sheets(
+                                nome_completo, 
+                                email, 
+                                pnr, 
+                                itinerario_venda, 
+                                valor_venda
+                            )
+                            if sucesso_sheets:
+                                st.toast("Dados guardados na base de dados! ✅")
+                        except Exception as e:      
+                            st.error(f"Erro ao registar na base de dados: {e}")
+                        # 3. Segue para o envio do e-mail com o bilhete
+                        enviar_email(email, f"Seu bilhete foi emitido! PNR: {pnr}", html_design)
 
 
                         # Design do E-mail 2 (O seu design estilo Decolar que já estava no código)
@@ -630,34 +664,51 @@ elif st.session_state.pagina == "reserva":
 
 elif st.session_state.pagina == "login":
     st.title("✈️ Área do Passageiro")
-    
-    with st.container(border=True):
-        email_login = st.text_input("E-mail da reserva")
-        pnr_login = st.text_input("Código PNR")
-        
-        if st.button("Ver Minha Viagem"):
-            reserva = buscar_reserva_por_pnr(email_login, pnr_login)
-            
-            if reserva:
-                st.session_state.dados_reserva_logada = reserva
-                st.success("Reserva encontrada!")
-            else:
-                st.error("Reserva não encontrada. Verifique os dados.")
+    st.subheader("Aceda à sua reserva e itinerários")
 
-    # Se encontrar a reserva na folha, mostra os detalhes
-    if st.session_state.get("dados_reserva_logada"):
-        res = st.session_state.dados_reserva_logada
+    # Painel de Login
+    with st.container(border=True):
+        col_l1, col_l2 = st.columns(2)
+        email_input = col_l1.text_input("E-mail utilizado na compra")
+        pnr_input = col_l2.text_input("Código da Reserva (PNR)")
+        
+        if st.button("Procurar Minha Viagem", use_container_width=True):
+            with st.spinner("A consultar base de dados..."):
+                reserva_encontrada = buscar_reserva_por_pnr(email_input, pnr_input)
+                
+                if reserva_encontrada:
+                    st.session_state.reserva_ativa = reserva_encontrada
+                    st.success("Reserva localizada com sucesso!")
+                else:
+                    st.error("Não encontramos nenhuma reserva com estes dados.")
+
+    # Se o cliente estiver "logado" (reserva encontrada)
+    if st.session_state.get("reserva_ativa"):
+        res = st.session_state.reserva_ativa
         st.divider()
-        st.markdown(f"### Olá, {res['Passageiro']}!")
         
-        col1, col2 = st.columns(2)
-        col1.metric("Status", res['Status'])
-        col2.metric("Valor Pago", res['Valor'])
+        st.markdown(f"### Olá, {res['Passageiro']}! 👋")
         
-        st.info(f"📍 **Itinerário:** {res['Itinerário']}")
-        
-        st.subheader("🛠️ O que deseja fazer?")
+        # Dashboard de Informações
         c1, c2, c3 = st.columns(3)
-        c1.button("📄 Baixar PDF")
-        c2.button("🔄 Alterar Voo")
-        c3.button("❌ Cancelar", type="secondary")
+        c1.metric("Localizador (PNR)", res['PNR'])
+        c2.metric("Status", res['Status'])
+        c3.metric("Total Pago", res['Valor Pago'])
+
+        st.info(f"📍 **Itinerário:** {res['Itinerário']}")
+
+        # Ações do Cliente
+        st.subheader("🛠️ Gestão da Reserva")
+        col_btn1, col_btn2, col_btn3 = st.columns(3)
+        
+        with col_btn1:
+            if st.button("📄 Ver Itinerário (PDF)", use_container_width=True):
+                st.info("O link para o PDF oficial será gerado aqui.")
+        
+        with col_btn2:
+            if st.button("🔄 Alterar Voo", use_container_width=True):
+                st.warning("Para alterações, contacte o suporte via WhatsApp.")
+        
+        with col_btn3:
+            if st.button("❌ Cancelar Viagem", type="secondary", use_container_width=True):
+                st.error("Atenção: Cancelamentos dependem das regras da companhia aérea.")
