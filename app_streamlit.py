@@ -407,7 +407,7 @@ if st.session_state.pagina == "busca":
                             "Internacional": is_intl,
                             "Moeda_Busca": moeda_visu,
                             "Data_Voo": data_ida
-                            "Trechos": fatias_voo
+                            
                         })
 
                     st.success(f"Cotação aplicada: 1€ = R$ {cotacao_atual:.2f}")
