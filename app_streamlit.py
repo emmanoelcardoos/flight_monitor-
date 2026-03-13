@@ -264,14 +264,15 @@ if st.session_state.pagina == "busca":
         destino = col2.selectbox("Destino", opcoes_cidades)
 
         col3, col4 = st.columns(2)
-        data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7))
+        data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7), key="data_ida_input")
     
     # 2. Data de Volta condicional
         data_volta = None
         if tipo_viagem == "Ida e Volta":
-            data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14))
+            data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14), key="data_volta_input" )
         else:
             col4.info("Viagem só de ida")
+            data_volta = None
 
         moeda_visu = col1.selectbox("Exibir preços em:", ["Real (R$)", "Euro (€)"])
     
