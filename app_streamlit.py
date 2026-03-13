@@ -1,19 +1,23 @@
-import streamlit as st
-import requests
+import json
+import re
 from datetime import datetime, timedelta
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import stripe
+
 import gspread
+import requests
+import streamlit as st
+import stripe
 from oauth2client.service_account import ServiceAccountCredentials
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+import smtplib
 
 
-# =========================
-# CONFIG
-# =========================
+# =========================================================
+# CONFIG GERAL
+# =========================================================
 COMISSAO_PERCENTUAL = 0.12
 WHATSAPP_SUPORTE = "351936797003"
+NOME_PLANILHA = "Alertas_Flight_Monitor"
 
 AEROPORTOS = {
     "São Paulo (GRU)": "GRU",
@@ -81,9 +85,100 @@ AEROPORTOS_BRASIL = {
 }
 
 
-# =========================
+# =========================================================
+# ESTILO
+# =========================================================
+def aplicar_estilo():
+    st.markdown("""
+    <style>
+    .block-container {
+        padding-top: 1.2rem;
+        padding-bottom: 2rem;
+        max-width: 1280px;
+    }
+    .agency-hero {
+        background: linear-gradient(135deg, #003580, #0057b8);
+        color: white;
+        padding: 28px;
+        border-radius: 20px;
+        margin-bottom: 18px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+    }
+    .agency-hero h1 {
+        margin: 0 0 8px 0;
+        font-size: 2rem;
+    }
+    .agency-hero p {
+        margin: 0;
+        opacity: 0.95;
+        font-size: 1rem;
+    }
+    .agency-card {
+        background: white;
+        border: 1px solid #e8edf5;
+        border-radius: 18px;
+        padding: 18px;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        margin-bottom: 14px;
+    }
+    .small-muted {
+        color: #667085;
+        font-size: 0.92rem;
+    }
+    .price-big {
+        font-size: 2rem;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    .badge-ok {
+        display: inline-block;
+        padding: 6px 11px;
+        background: #ecfdf3;
+        color: #027a48;
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }
+    .box-soft {
+        background: #f8fafc;
+        border: 1px solid #e2e8f0;
+        border-radius: 14px;
+        padding: 14px;
+    }
+    .section-title {
+        margin-top: 8px;
+        margin-bottom: 10px;
+        font-weight: 700;
+        color: #0f172a;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+
+# =========================================================
+# VALIDAÇÕES
+# =========================================================
+def email_valido(email: str) -> bool:
+    padrao = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    return re.match(padrao, email.strip()) is not None
+
+def nome_valido(nome: str) -> bool:
+    return len(nome.strip()) >= 2
+
+def documento_valido(doc: str) -> bool:
+    return len(doc.strip()) >= 5
+
+def limpar_texto(valor: str) -> str:
+    return str(valor).strip()
+
+def money_fmt(moeda: str, valor: float) -> str:
+    return f"{moeda} {valor:.2f}"
+
+
+# =========================================================
 # GOOGLE SHEETS
-# =========================
+# =========================================================
 def conectar_sheets():
     try:
         scope = [
@@ -93,11 +188,47 @@ def conectar_sheets():
         creds_dict = st.secrets["gspread"]
         creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
         client = gspread.authorize(creds)
-        return client.open("Alertas_Flight_Monitor")
+        return client.open(NOME_PLANILHA)
     except Exception as e:
         st.error(f"Erro ao conectar ao Google Sheets: {e}")
         return None
 
+def obter_ou_criar_aba(planilha, nome_aba, cabecalho):
+    try:
+        try:
+            aba = planilha.worksheet(nome_aba)
+        except Exception:
+            aba = planilha.add_worksheet(title=nome_aba, rows=1000, cols=max(20, len(cabecalho) + 2))
+            aba.append_row(cabecalho)
+        return aba
+    except Exception as e:
+        st.error(f"Erro ao preparar a aba '{nome_aba}': {e}")
+        return None
+
+def garantir_abas():
+    planilha = conectar_sheets()
+    if not planilha:
+        return
+
+    obter_ou_criar_aba(
+        planilha,
+        "Reservas_Confirmadas",
+        ["Email", "PNR", "Passageiro", "Data", "Itinerário", "Valor", "Status", "PDF"]
+    )
+    obter_ou_criar_aba(
+        planilha,
+        "Alertas_Preco",
+        ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
+    )
+    obter_ou_criar_aba(
+        planilha,
+        "Pagamentos",
+        [
+            "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
+            "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
+            "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON"
+        ]
+    )
 
 def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
     planilha = conectar_sheets()
@@ -105,14 +236,17 @@ def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf
         return False
 
     try:
-        aba = planilha.worksheet("Reservas_Confirmadas")
+        aba = obter_ou_criar_aba(
+            planilha,
+            "Reservas_Confirmadas",
+            ["Email", "PNR", "Passageiro", "Data", "Itinerário", "Valor", "Status", "PDF"]
+        )
         data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
         aba.append_row([email, pnr, nome_completo, data_hora, itinerario, valor, "Emitido", link_pdf])
         return True
     except Exception as e:
-        st.error(f"Erro ao gravar no Sheets: {e}")
+        st.error(f"Erro ao gravar reserva no Sheets: {e}")
         return False
-
 
 def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     planilha = conectar_sheets()
@@ -133,10 +267,7 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
             email_planilha = str(linha[0]).strip().lower()
             pnr_planilha = str(linha[1]).strip().upper()
 
-            if (
-                email_planilha == email_cliente.strip().lower()
-                and pnr_planilha == pnr_cliente.strip().upper()
-            ):
+            if email_planilha == email_cliente.strip().lower() and pnr_planilha == pnr_cliente.strip().upper():
                 return {
                     "Email": linha[0],
                     "PNR": linha[1],
@@ -147,12 +278,10 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
                     "Status": linha[6] if len(linha) > 6 else "Confirmado",
                     "PDF": linha[7] if len(linha) > 7 else "",
                 }
-
         return None
     except Exception as e:
-        st.error(f"Erro ao buscar na base de dados: {e}")
+        st.error(f"Erro ao buscar reserva: {e}")
         return None
-
 
 def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
     planilha = conectar_sheets()
@@ -160,21 +289,128 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
         return False
 
     try:
-        aba = planilha.get_worksheet(0)
-        nova_linha = [
-            email, itinerario, origem, destino, str(data_ida),
-            "", 1, 0, 0, preco_inicial, moeda
-        ]
+        aba = obter_ou_criar_aba(
+            planilha,
+            "Alertas_Preco",
+            ["Email", "Itinerário", "Origem", "Destino", "Data_Ida", "Data_Volta", "Ativo", "Disparos", "Ultimo_Status", "Preco_Inicial", "Moeda"]
+        )
+        nova_linha = [email, itinerario, origem, destino, str(data_ida), "", 1, 0, "", preco_inicial, moeda]
         aba.append_row(nova_linha)
         return True
     except Exception as e:
         st.error(f"Erro ao gravar alerta: {e}")
         return False
 
+def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido, offer_id, itinerario, companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
 
-# =========================
+    try:
+        aba = obter_ou_criar_aba(
+            planilha,
+            "Pagamentos",
+            [
+                "Session_ID", "Checkout_URL", "Email", "Nome", "Apelido", "Offer_ID", "Itinerario",
+                "Companhia", "Preco_Exibido", "Moeda_Exibida", "Valor_Duffel_EUR", "Status_Pagamento",
+                "Stripe_Payment_Status", "Data_Criacao", "Data_Confirmacao", "Trechos_JSON"
+            ]
+        )
+
+        dados = aba.get_all_values()
+        for i, linha in enumerate(dados[1:], start=2):
+            if len(linha) > 0 and linha[0] == session_id:
+                aba.update(f"A{i}:P{i}", [[
+                    session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
+                    companhia, str(preco_exibido), moeda_exibida, str(valor_duffel_eur),
+                    "PENDENTE", "unpaid", datetime.now().strftime("%d/%m/%Y %H:%M"), "",
+                    json.dumps(trechos, ensure_ascii=False)
+                ]])
+                return True
+
+        aba.append_row([
+            session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
+            companhia, str(preco_exibido), moeda_exibida, str(valor_duffel_eur),
+            "PENDENTE", "unpaid", datetime.now().strftime("%d/%m/%Y %H:%M"), "",
+            json.dumps(trechos, ensure_ascii=False)
+        ])
+        return True
+    except Exception as e:
+        st.error(f"Erro ao registrar pagamento pendente: {e}")
+        return False
+
+def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
+
+    try:
+        aba = planilha.worksheet("Pagamentos")
+        dados = aba.get_all_values()
+
+        for i, linha in enumerate(dados[1:], start=2):
+            if len(linha) > 0 and linha[0] == session_id:
+                aba.update(f"L{i}:N{i}", [[
+                    "PAGO",
+                    stripe_payment_status,
+                    datetime.now().strftime("%d/%m/%Y %H:%M")
+                ]])
+                return True
+        return False
+    except Exception as e:
+        st.error(f"Erro ao marcar pagamento como pago: {e}")
+        return False
+
+def obter_pagamento_por_session_id(session_id):
+    planilha = conectar_sheets()
+    if not planilha:
+        return None
+
+    try:
+        aba = planilha.worksheet("Pagamentos")
+        dados = aba.get_all_values()
+        if len(dados) <= 1:
+            return None
+
+        headers = dados[0]
+        for linha in dados[1:]:
+            if len(linha) > 0 and linha[0] == session_id:
+                while len(linha) < len(headers):
+                    linha.append("")
+                return dict(zip(headers, linha))
+        return None
+    except Exception as e:
+        st.error(f"Erro ao obter pagamento: {e}")
+        return None
+
+def pagamento_confirmado(email, offer_id):
+    planilha = conectar_sheets()
+    if not planilha:
+        return False
+
+    try:
+        aba = planilha.worksheet("Pagamentos")
+        dados = aba.get_all_values()
+
+        for linha in dados[1:]:
+            if len(linha) < 12:
+                continue
+
+            email_pg = str(linha[2]).strip().lower()
+            offer_pg = str(linha[5]).strip()
+            status_pg = str(linha[11]).strip().lower()
+
+            if email_pg == email.strip().lower() and offer_pg == offer_id and status_pg == "pago":
+                return True
+
+        return False
+    except Exception:
+        return False
+
+
+# =========================================================
 # EMAIL
-# =========================
+# =========================================================
 def enviar_email(destinatario, assunto, corpo_html):
     try:
         remetente = st.secrets["EMAIL_USER"]
@@ -196,56 +432,61 @@ def enviar_email(destinatario, assunto, corpo_html):
         st.error(f"Erro ao enviar e-mail: {e}")
         return False
 
-
-def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total):
-    blocos_trechos = []
+def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total, itinerario):
+    blocos = []
 
     for idx_fatia, fatia in enumerate(trechos, start=1):
+        blocos.append(f"""
+        <div style="margin: 0 0 12px 0; font-weight: bold; color: #003580;">Trecho {idx_fatia}</div>
+        """)
+
         for seg in fatia:
-            blocos_trechos.append(f"""
-                <div style="padding: 12px; border: 1px solid #eee; border-radius: 8px; margin-bottom: 10px; background-color: #fafafa;">
-                    <strong>{seg['cia']}</strong><br>
-                    <span><b>{seg['de']}</b> ➔ <b>{seg['para']}</b></span><br>
-                    <span>Partida: {seg['partida']} | Chegada: {seg['chegada']}</span><br>
-                    <span>Aeronave: {seg['aviao']}</span>
-                </div>
+            blocos.append(f"""
+            <div style="padding: 14px; border: 1px solid #eee; border-radius: 10px; margin-bottom: 10px; background: #fafafa;">
+                <div style="font-weight: bold;">{seg['cia']}</div>
+                <div style="margin-top: 6px;"><b>{seg['de']}</b> ➔ <b>{seg['para']}</b></div>
+                <div style="margin-top: 4px; color: #666;">Partida: {seg['partida']} | Chegada: {seg['chegada']}</div>
+                <div style="margin-top: 4px; color: #666;">Aeronave: {seg['aviao']}</div>
+            </div>
             """)
 
-    html = f"""
+    return f"""
     <html>
     <body style="font-family: Arial, sans-serif; color: #333; background-color: #f4f4f4; margin: 0; padding: 20px;">
-        <div style="max-width: 650px; margin: auto; background: white; border-radius: 8px; overflow: hidden;">
-            <div style="background-color: #003580; padding: 30px 20px; text-align: center; color: white;">
-                <h1 style="margin: 0;">Bilhete emitido com sucesso</h1>
-                <p style="margin-top: 8px;">Olá, {nome}.</p>
+        <div style="max-width: 680px; margin: auto; background: white; border-radius: 12px; overflow: hidden;">
+            <div style="background: linear-gradient(135deg, #003580, #0057b8); color: white; padding: 26px;">
+                <h1 style="margin:0;">✈️ Bilhete emitido com sucesso</h1>
+                <p style="margin-top:8px;">Olá, {nome}. A sua viagem está confirmada.</p>
             </div>
 
-            <div style="padding: 20px;">
+            <div style="padding: 24px;">
                 <p><strong>PNR:</strong> {pnr}</p>
+                <p><strong>Itinerário:</strong> {itinerario}</p>
                 <p><strong>Companhia:</strong> {companhia}</p>
                 <p><strong>Valor pago:</strong> {valor_total}</p>
 
-                <h3>Detalhes do itinerário</h3>
-                {''.join(blocos_trechos)}
+                <h3 style="color:#003580;">Detalhes do voo</h3>
+                {''.join(blocos)}
 
-                <p style="margin-top: 20px;">
-                    Chegue ao aeroporto com antecedência e tenha os seus documentos em mãos.
-                </p>
+                <div style="margin-top: 20px; padding: 16px; background:#f8fafc; border-radius:10px; border:1px solid #e2e8f0;">
+                    <strong>Informações importantes:</strong><br>
+                    Chegue ao aeroporto com antecedência mínima de 3 horas em voos internacionais e 2 horas em voos domésticos.<br>
+                    Tenha os seus documentos em mãos no momento do embarque.
+                </div>
             </div>
 
-            <div style="padding: 20px; background: #f8f8f8; text-align: center; font-size: 12px; color: #666;">
+            <div style="padding: 18px; text-align:center; background:#111827; color:#d1d5db; font-size: 12px;">
                 © {datetime.now().year} Flight Monitor
             </div>
         </div>
     </body>
     </html>
     """
-    return html
 
 
-# =========================
-# APIs EXTERNAS
-# =========================
+# =========================================================
+# APIS EXTERNAS
+# =========================================================
 def get_cotacao_ao_vivo():
     try:
         res = requests.get("https://economia.awesomeapi.com.br/last/EUR-BRL", timeout=20)
@@ -255,9 +496,9 @@ def get_cotacao_ao_vivo():
     except Exception:
         return 6.02
 
-
-def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
+def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id, companhia, preco_exibido, moeda_exibida, trechos):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
+    base_url = st.secrets.get("APP_BASE_URL", "https://flightmonitorec.streamlit.app")
 
     try:
         session = stripe.checkout.Session.create(
@@ -265,74 +506,205 @@ def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario):
             line_items=[{
                 "price_data": {
                     "currency": "eur",
-                    "product_data": {"name": f"Voo: {itinerario}"},
+                    "product_data": {
+                        "name": f"Voo: {itinerario}",
+                        "description": f"Reserva aérea - {nome_pax} {apelido_pax}"
+                    },
                     "unit_amount": int(float(valor_eur) * 100),
                 },
                 "quantity": 1,
             }],
             mode="payment",
-            success_url=f"https://flightmonitorec.streamlit.app/?pagamento=sucesso&email={email_pax}&nome={nome_pax}",
-            cancel_url="https://flightmonitorec.streamlit.app/?pagamento=cancelado",
+            success_url=f"{base_url}/?pagamento=sucesso&session_id={{CHECKOUT_SESSION_ID}}",
+            cancel_url=f"{base_url}/?pagamento=cancelado",
             customer_email=email_pax,
+            metadata={
+                "nome_pax": nome_pax,
+                "apelido_pax": apelido_pax,
+                "email_pax": email_pax,
+                "itinerario": itinerario,
+                "offer_id": offer_id,
+                "companhia": companhia,
+            }
+        )
+
+        registrar_pagamento_pendente(
+            session_id=session.id,
+            checkout_url=session.url,
+            email=email_pax,
+            nome=nome_pax,
+            apelido=apelido_pax,
+            offer_id=offer_id,
+            itinerario=itinerario,
+            companhia=companhia,
+            preco_exibido=preco_exibido,
+            moeda_exibida=moeda_exibida,
+            valor_duffel_eur=valor_eur,
+            trechos=trechos
         )
         return session.url
     except Exception as e:
         st.error(f"Erro na Stripe: {e}")
         return None
 
+def verificar_pagamento_stripe_por_session(session_id):
+    stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
+    try:
+        session = stripe.checkout.Session.retrieve(session_id)
+        return {
+            "id": session.id,
+            "payment_status": session.payment_status,
+            "status": session.status,
+            "customer_email": session.customer_email,
+        }
+    except Exception as e:
+        return {"erro": str(e)}
 
-# =========================
-# STREAMLIT STATE
-# =========================
+def criar_ordem_duffel(offer_id, pax_id, titulo, nome, apelido, genero, nascimento, email):
+    api_token = st.secrets["DUFFEL_TOKEN"]
+    headers = {
+        "Authorization": f"Bearer {api_token}",
+        "Duffel-Version": "v2",
+        "Content-Type": "application/json",
+    }
+
+    payload = {
+        "data": {
+            "type": "instant",
+            "selected_offers": [offer_id],
+            "passengers": [{
+                "id": pax_id,
+                "title": titulo,
+                "given_name": nome,
+                "family_name": apelido,
+                "gender": genero,
+                "born_on": nascimento,
+                "email": email,
+                "phone_number": f"+{WHATSAPP_SUPORTE}",
+            }],
+            "payments": []
+        }
+    }
+
+    res = requests.post(
+        "https://api.duffel.com/air/orders",
+        headers=headers,
+        json=payload,
+        timeout=60,
+    )
+    return res
+
+
+# =========================================================
+# HELPERS DE UI
+# =========================================================
+def hero_home():
+    st.markdown("""
+    <div class="agency-hero">
+        <h1>✈️ Encontre e emita a sua próxima viagem com segurança</h1>
+        <p>Tarifas em tempo real, apoio humano e um processo de reserva com aparência profissional.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    c1, c2, c3 = st.columns(3)
+    c1.markdown('<div class="badge-ok">Pagamento Seguro</div>', unsafe_allow_html=True)
+    c2.markdown('<div class="badge-ok">Suporte via WhatsApp</div>', unsafe_allow_html=True)
+    c3.markdown('<div class="badge-ok">Emissão após confirmação</div>', unsafe_allow_html=True)
+
+def render_card_voo(v, idx):
+    trechos = v.get("Trechos", [])
+    if not trechos:
+        return
+
+    ida = trechos[0]
+    ida_origem = ida[0]["de"]
+    ida_destino = ida[-1]["para"]
+    ida_partida = ida[0]["partida"]
+    ida_chegada = ida[-1]["chegada"]
+
+    st.markdown('<div class="agency-card">', unsafe_allow_html=True)
+    col1, col2, col3 = st.columns([2, 4, 2])
+
+    with col1:
+        st.markdown(f"**{v['Companhia']}**")
+        st.markdown('<span class="small-muted">Tarifa disponível agora</span>', unsafe_allow_html=True)
+
+    with col2:
+        st.markdown(f"### {ida_origem} ➔ {ida_destino}")
+        st.markdown(f'<div class="small-muted">Saída às {ida_partida} • Chegada às {ida_chegada}</div>', unsafe_allow_html=True)
+
+        if len(trechos) > 1:
+            volta = trechos[1]
+            st.markdown(f'<div class="small-muted" style="margin-top: 6px;">Retorno: {volta[0]["de"]} ({volta[0]["partida"]}) ➔ {volta[-1]["para"]} ({volta[-1]["chegada"]})</div>', unsafe_allow_html=True)
+
+        with st.expander("Ver detalhes do itinerário"):
+            for i, fatia in enumerate(trechos, start=1):
+                st.write(f"**Trecho {i}**")
+                for seg in fatia:
+                    st.write(f"✈️ {seg['cia']} | {seg['de']} ➔ {seg['para']} | {seg['partida']} → {seg['chegada']} | {seg['aviao']}")
+
+    with col3:
+        st.markdown(f'<div class="price-big">{v["Moeda"]} {v["Preço"]:.2f}</div>', unsafe_allow_html=True)
+        st.markdown('<div class="small-muted">Taxas e margem já incluídas</div>', unsafe_allow_html=True)
+        if st.button("SELECIONAR", key=f"sel_{idx}", type="primary", use_container_width=True):
+            st.session_state.voo_selecionado = v
+            st.session_state.pagina = "reserva"
+            st.rerun()
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+
+# =========================================================
+# APP STREAMLIT
+# =========================================================
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
+aplicar_estilo()
+garantir_abas()
 
 if "pagina" not in st.session_state:
     st.session_state.pagina = "busca"
-
 if "voo_selecionado" not in st.session_state:
     st.session_state.voo_selecionado = None
-
 if "busca_feita" not in st.session_state:
     st.session_state.busca_feita = False
-
 if "resultados_voos" not in st.session_state:
     st.session_state.resultados_voos = []
-
 if "reserva_ativa" not in st.session_state:
     st.session_state.reserva_ativa = None
+if "pagamento_confirmado_atual" not in st.session_state:
+    st.session_state.pagamento_confirmado_atual = False
 
 if st.query_params.get("pagamento") == "sucesso":
     st.session_state.pagina = "sucesso"
 
-
-# =========================
-# SIDEBAR
-# =========================
 with st.sidebar:
     st.title("📌 Flight Monitor")
-    if st.button("🔍 Procurar Voos"):
+    if st.button("🔍 Procurar Voos", use_container_width=True):
         st.session_state.pagina = "busca"
-    if st.button("👤 Área do Cliente"):
+    if st.button("👤 Área do Cliente", use_container_width=True):
         st.session_state.pagina = "login"
 
     st.divider()
+    st.markdown("**Confiança para o cliente**")
+    st.caption("Pagamento seguro • emissão rápida • apoio humanizado")
     st.markdown(f"**Suporte:** [WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
 
 
-# =========================
+# =========================================================
 # PÁGINA BUSCA
-# =========================
+# =========================================================
 if st.session_state.pagina == "busca":
-    st.title("✈️ Flight Monitor Trips")
+    hero_home()
 
     if st.button("Limpar Cache e Nova Busca"):
         st.session_state.resultados_voos = []
         st.session_state.busca_feita = False
         st.session_state.voo_selecionado = None
+        st.session_state.pagamento_confirmado_atual = False
         st.rerun()
 
     opcoes_cidades = list(AEROPORTOS.keys())
-    tipo_v = st.radio("Tipo de Viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True)
+    tipo_v = st.radio("Tipo de viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True)
 
     with st.form("busca_voos"):
         col1, col2 = st.columns(2)
@@ -341,8 +713,8 @@ if st.session_state.pagina == "busca":
 
         col3, col4 = st.columns(2)
         data_ida = col3.date_input("Data de Partida", value=datetime.today() + timedelta(days=7))
-
         data_volta = None
+
         if tipo_v == "Ida e Volta":
             data_volta = col4.date_input("Data de Retorno", value=datetime.today() + timedelta(days=14))
         else:
@@ -358,9 +730,8 @@ if st.session_state.pagina == "busca":
             st.error("A data de retorno deve ser posterior à data de ida.")
         else:
             st.session_state.busca_feita = True
-
             try:
-                with st.spinner("Em busca dos melhores voos..."):
+                with st.spinner("Em busca das melhores opções..."):
                     cotacao_atual = get_cotacao_ao_vivo()
                     api_token = st.secrets["DUFFEL_TOKEN"]
 
@@ -407,7 +778,6 @@ if st.session_state.pagina == "busca":
                         resposta = res.json()["data"]
                         offers = resposta.get("offers", [])
                         passageiros = resposta.get("passengers", [])
-
                         st.session_state.resultados_voos = []
 
                         for o in offers[:15]:
@@ -429,13 +799,13 @@ if st.session_state.pagina == "busca":
                                 fatias_voo.append(segs_fatia)
 
                             valor_eur = float(o["total_amount"])
-                            preco_final = valor_eur * (1 + COMISSAO_PERCENTUAL)
+                            preco_final_eur = valor_eur * (1 + COMISSAO_PERCENTUAL)
 
                             if "Real" in moeda_visu:
-                                preco_exibicao = preco_final * cotacao_atual
+                                preco_exibicao = preco_final_eur * cotacao_atual
                                 moeda = "R$"
                             else:
-                                preco_exibicao = preco_final
+                                preco_exibicao = preco_final_eur
                                 moeda = "€"
 
                             st.session_state.resultados_voos.append({
@@ -449,69 +819,37 @@ if st.session_state.pagina == "busca":
                                 "pax_ids": [p["id"] for p in passageiros],
                             })
                     else:
-                        erro = res.json()
-                        st.error(f"Erro na Duffel: {erro}")
+                        try:
+                            st.error(f"Erro na Duffel: {res.json()}")
+                        except Exception:
+                            st.error(f"Erro na Duffel: {res.text}")
 
             except Exception as e:
                 st.error(f"Erro durante a busca: {e}")
 
     if st.session_state.busca_feita and st.session_state.resultados_voos:
         resultados = sorted(st.session_state.resultados_voos, key=lambda x: x["Preço"])
-        st.markdown(f"### 🔍 Encontramos {len(resultados)} opções")
+        st.markdown(f"## 🔍 Encontrámos {len(resultados)} opções")
+        st.caption("Tarifas sujeitas à disponibilidade e alteração até à emissão.")
 
         for idx, v in enumerate(resultados):
-            trechos = v.get("Trechos", [])
-            if not trechos:
-                continue
-
-            with st.container(border=True):
-                col_logo, col_info, col_preco = st.columns([1, 3, 1.5])
-
-                col_logo.subheader(v["Companhia"])
-
-                with col_info:
-                    ida = trechos[0]
-                    st.markdown(f"**🛫 Ida:** {ida[0]['de']} ({ida[0]['partida']}) ➔ {ida[-1]['para']} ({ida[-1]['chegada']})")
-
-                    if len(trechos) > 1:
-                        volta = trechos[1]
-                        st.markdown(f"**🛬 Volta:** {volta[0]['de']} ({volta[0]['partida']}) ➔ {volta[-1]['para']} ({volta[-1]['chegada']})")
-
-                    with st.expander("Ver escalas e aeronaves"):
-                        for i, fatia in enumerate(trechos, start=1):
-                            st.caption(f"TRECHO {i}")
-                            for s in fatia:
-                                st.write(f"✈️ {s['cia']} | {s['de']} ➔ {s['para']} ({s['aviao']})")
-
-                with col_preco:
-                    st.subheader(f"{v['Moeda']} {v['Preço']:.2f}")
-                    if st.button("SELECIONAR", key=f"sel_{idx}", use_container_width=True, type="primary"):
-                        st.session_state.voo_selecionado = v
-                        st.session_state.pagina = "reserva"
-                        st.rerun()
+            render_card_voo(v, idx)
 
         st.divider()
-        st.subheader("🔔 Não encontrou o preço que queria?")
+        st.subheader("🔔 Alerta de preço")
 
-        with st.expander("Criar Alerta de Preço"):
-            email_alerta = st.text_input("Seu e-mail para o alerta")
-
+        with st.expander("Criar alerta para esta pesquisa"):
+            email_alerta = st.text_input("Seu e-mail para receber alerta")
             menor_preco = resultados[0]["Preço"]
             moeda_txt = resultados[0]["Moeda"]
 
             if st.button("Ativar Alerta de Preço", use_container_width=True):
-                if not email_alerta:
-                    st.error("Informe um e-mail.")
+                if not email_valido(email_alerta):
+                    st.error("Informe um e-mail válido.")
                 else:
                     itinerario_txt = f"{origem} para {destino}"
                     sucesso = salvar_alerta_preco(
-                        email_alerta,
-                        itinerario_txt,
-                        origem,
-                        destino,
-                        data_ida,
-                        menor_preco,
-                        moeda_txt,
+                        email_alerta, itinerario_txt, origem, destino, data_ida, menor_preco, moeda_txt
                     )
 
                     if sucesso:
@@ -520,12 +858,16 @@ if st.session_state.pagina == "busca":
                         st.error("Erro ao gravar alerta.")
 
 
-# =========================
-# PÁGINA LOGIN
-# =========================
+# =========================================================
+# PÁGINA LOGIN / ÁREA DO PASSAGEIRO
+# =========================================================
 elif st.session_state.pagina == "login":
-    st.title("✈️ Área do Passageiro")
-    st.subheader("Aceda à sua reserva e itinerários")
+    st.markdown("""
+    <div class="agency-hero">
+        <h1>👤 Área do Passageiro</h1>
+        <p>Aceda à sua reserva, veja o itinerário e acompanhe o estado da emissão.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
     with st.container(border=True):
         col_l1, col_l2 = st.columns(2)
@@ -534,20 +876,23 @@ elif st.session_state.pagina == "login":
 
         if st.button("Procurar Minha Viagem", use_container_width=True, type="primary"):
             with st.spinner("A consultar base de dados..."):
-                reserva_encontrada = buscar_reserva_por_pnr(email_input, pnr_input)
-
-                if reserva_encontrada:
-                    st.session_state.reserva_ativa = reserva_encontrada
-                    st.success("Reserva localizada com sucesso!")
+                if not email_valido(email_input):
+                    st.error("Informe um e-mail válido.")
+                elif not pnr_input.strip():
+                    st.error("Informe o PNR.")
                 else:
-                    st.session_state.reserva_ativa = None
-                    st.error("Não encontramos nenhuma reserva com estes dados.")
+                    reserva_encontrada = buscar_reserva_por_pnr(email_input, pnr_input)
+                    if reserva_encontrada:
+                        st.session_state.reserva_ativa = reserva_encontrada
+                        st.success("Reserva localizada com sucesso!")
+                    else:
+                        st.session_state.reserva_ativa = None
+                        st.error("Não encontramos nenhuma reserva com estes dados.")
 
     if st.session_state.get("reserva_ativa"):
         res = st.session_state.reserva_ativa
         st.divider()
-
-        st.markdown(f"### Olá, {res['Passageiro']}! 👋")
+        st.markdown(f"### Olá, {res['Passageiro']} 👋")
 
         c1, c2, c3 = st.columns(3)
         c1.metric("Localizador (PNR)", res["PNR"])
@@ -567,24 +912,22 @@ elif st.session_state.pagina == "login":
                 st.button("📄 PDF em Processamento", disabled=True, use_container_width=True)
 
         with col_btn2:
-            st.link_button("🔄 Alterar Dados", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
+            st.link_button("🔄 Alterações / Suporte", f"https://wa.me/{WHATSAPP_SUPORTE}", use_container_width=True)
 
         with col_btn3:
-            if st.button("❌ Cancelar Viagem", type="secondary", use_container_width=True):
+            if st.button("❌ Solicitar Cancelamento", type="secondary", use_container_width=True):
                 st.warning("Pedidos de cancelamento são analisados pelo suporte em até 24h.")
 
 
-# =========================
+# =========================================================
 # PÁGINA RESERVA
-# =========================
+# =========================================================
 elif st.session_state.pagina == "reserva":
     v = st.session_state.get("voo_selecionado")
 
     if not v:
         st.session_state.pagina = "busca"
         st.rerun()
-
-    st.title("🏁 Finalizar Reserva")
 
     trechos = v.get("Trechos", [])
     if not trechos:
@@ -594,16 +937,25 @@ elif st.session_state.pagina == "reserva":
     ida = trechos[0]
     origem_p = ida[0]["de"]
     destino_p = ida[-1]["para"]
+    itinerario_curto = f"{origem_p} ➔ {destino_p}"
 
-    st.info(f"✈️ **Voo:** {v.get('Companhia')} | **Resumo:** {origem_p} ➔ {destino_p}")
-    st.metric(label="Valor Total a Pagar", value=f"{v['Moeda']} {v['Preço']:.2f}")
+    st.markdown(f"""
+    <div class="agency-hero">
+        <h1>🏁 Finalizar Reserva</h1>
+        <p>{v.get("Companhia")} • {itinerario_curto} • Processo assistido e pagamento seguro.</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    top1, top2, top3 = st.columns(3)
+    top1.metric("Companhia", v["Companhia"])
+    top2.metric("Itinerário", itinerario_curto)
+    top3.metric("Valor Total", money_fmt(v["Moeda"], v["Preço"]))
 
     col_dados, col_resumo = st.columns([2, 1])
 
     with col_dados:
+        st.markdown("### 👤 Dados do Passageiro")
         with st.form("form_pax"):
-            st.subheader("👤 Detalhes do Passageiro")
-
             c_tit, c_gen = st.columns(2)
             titulo_input = c_tit.selectbox("Título", ["Senhor", "Senhora"])
             genero_input = c_gen.selectbox("Gênero", ["Masculino", "Feminino"])
@@ -615,7 +967,7 @@ elif st.session_state.pagina == "reserva":
             email_pax = st.text_input("E-mail", value=st.session_state.get("pax_email", ""))
 
             c3, c4 = st.columns(2)
-            documento_id = c3.text_input("CPF / Cartão de Cidadão")
+            documento_id = c3.text_input("CPF / Cartão de Cidadão", value=st.session_state.get("pax_documento", ""))
             nasc_pax = c4.date_input(
                 "Data de Nascimento",
                 value=datetime(1995, 1, 1),
@@ -624,66 +976,104 @@ elif st.session_state.pagina == "reserva":
             )
 
             precisa_passaporte = v.get("Internacional", False)
-            passaporte = ""
+            passaporte = st.session_state.get("pax_passaporte", "")
             validade_passaporte = None
 
             if precisa_passaporte:
                 st.warning("⚠️ Voo internacional: passaporte obrigatório")
                 cp1, cp2 = st.columns(2)
-                passaporte = cp1.text_input("Número do Passaporte")
+                passaporte = cp1.text_input("Número do Passaporte", value=st.session_state.get("pax_passaporte", ""))
                 validade_passaporte = cp2.date_input(
                     "Validade do Passaporte",
                     value=datetime.today() + timedelta(days=365),
                 )
 
-            submitted = st.form_submit_button("✅ VALIDAR DADOS")
+            submitted = st.form_submit_button("✅ VALIDAR DADOS", use_container_width=True)
 
             if submitted:
-                if not nome_pax or not apelido_pax or not email_pax:
-                    st.error("Preencha nome, apelido e e-mail.")
+                erros = []
+
+                if not nome_valido(nome_pax):
+                    erros.append("Nome inválido.")
+                if not nome_valido(apelido_pax):
+                    erros.append("Apelido inválido.")
+                if not email_valido(email_pax):
+                    erros.append("E-mail inválido.")
+                if not documento_valido(documento_id):
+                    erros.append("Documento inválido.")
+                if precisa_passaporte and not passaporte.strip():
+                    erros.append("Passaporte obrigatório para voo internacional.")
+
+                if erros:
+                    for erro in erros:
+                        st.error(erro)
                 else:
                     st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
                     st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
-                    st.session_state["pax_nome"] = nome_pax
-                    st.session_state["pax_apelido"] = apelido_pax
-                    st.session_state["pax_email"] = email_pax
-                    st.session_state["pax_documento"] = documento_id
+                    st.session_state["pax_nome"] = nome_pax.strip()
+                    st.session_state["pax_apelido"] = apelido_pax.strip()
+                    st.session_state["pax_email"] = email_pax.strip()
+                    st.session_state["pax_documento"] = documento_id.strip()
                     st.session_state["pax_nascimento"] = str(nasc_pax)
-                    st.session_state["pax_passaporte"] = passaporte
+                    st.session_state["pax_passaporte"] = passaporte.strip()
                     st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
                     st.success("Dados validados com sucesso.")
 
     with col_resumo:
-        st.subheader("💳 Pagamento")
+        st.markdown("### 💳 Resumo e Pagamento")
+        st.markdown('<div class="box-soft">', unsafe_allow_html=True)
+        st.write(f"**Rota:** {itinerario_curto}")
+        st.write(f"**Companhia:** {v['Companhia']}")
+        st.write(f"**Preço final:** {money_fmt(v['Moeda'], v['Preço'])}")
+        st.caption("Pagamento processado com segurança pela Stripe.")
+        st.markdown('</div>', unsafe_allow_html=True)
 
-        if st.session_state.get("pax_email"):
-            itinerario_pagamento = f"{origem_p} ➔ {destino_p}"
-            url_checkout = criar_checkout_stripe(
-                v["valor_bruto_duffel"],
-                st.session_state["pax_nome"],
-                st.session_state["pax_email"],
-                itinerario_pagamento,
-            )
-            if url_checkout:
-                st.link_button("🚀 PAGAR AGORA", url_checkout, type="primary", use_container_width=True)
+        dados_ok = all([
+            st.session_state.get("pax_nome"),
+            st.session_state.get("pax_apelido"),
+            st.session_state.get("pax_email"),
+        ])
+
+        if not dados_ok:
+            st.warning("Valide os dados do passageiro para gerar o link de pagamento.")
         else:
-            st.warning("Valide os dados do passageiro ao lado primeiro.")
+            if not pagamento_confirmado(st.session_state["pax_email"], v["id_offer"]):
+                if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
+                    url_checkout = criar_checkout_stripe(
+                        valor_eur=float(v["valor_bruto_duffel"]),
+                        nome_pax=st.session_state["pax_nome"],
+                        apelido_pax=st.session_state["pax_apelido"],
+                        email_pax=st.session_state["pax_email"],
+                        itinerario=itinerario_curto,
+                        offer_id=v["id_offer"],
+                        companhia=v["Companhia"],
+                        preco_exibido=v["Preço"],
+                        moeda_exibida=v["Moeda"],
+                        trechos=v["Trechos"],
+                    )
+                    if url_checkout:
+                        st.success("Link de pagamento gerado com sucesso.")
+                        st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
+            else:
+                st.success("✅ Pagamento confirmado.")
+                st.session_state.pagamento_confirmado_atual = True
 
     st.divider()
+    st.markdown("### ✈️ Emissão do Bilhete")
 
-    if st.button("EMITIR BILHETE", type="primary", use_container_width=True):
-        if not st.session_state.get("pax_email"):
-            st.error("Valide os dados do passageiro antes de emitir.")
-        else:
+    pode_emitir = pagamento_confirmado(
+        st.session_state.get("pax_email", ""),
+        v["id_offer"]
+    )
+
+    if not pode_emitir:
+        st.info("A emissão será liberada assim que o pagamento for confirmado pela Stripe.")
+    else:
+        st.success("Pagamento validado. Já é possível emitir o bilhete.")
+
+        if st.button("EMITIR BILHETE", type="primary", use_container_width=True):
             try:
-                with st.spinner("Emitindo bilhete..."):
-                    api_token = st.secrets["DUFFEL_TOKEN"]
-                    headers = {
-                        "Authorization": f"Bearer {api_token}",
-                        "Duffel-Version": "v2",
-                        "Content-Type": "application/json",
-                    }
-
+                with st.spinner("Emitindo bilhete com a companhia aérea..."):
                     nome = st.session_state["pax_nome"]
                     apelido = st.session_state["pax_apelido"]
                     email = st.session_state["pax_email"]
@@ -691,33 +1081,19 @@ elif st.session_state.pagina == "reserva":
                     tit_code = st.session_state["pax_titulo"]
                     gen_code = st.session_state["pax_genero"]
 
-                    payload = {
-                        "data": {
-                            "type": "instant",
-                            "selected_offers": [v["id_offer"]],
-                            "passengers": [{
-                                "id": v["pax_ids"][0],
-                                "title": tit_code,
-                                "given_name": nome,
-                                "family_name": apelido,
-                                "gender": gen_code,
-                                "born_on": dn,
-                                "email": email,
-                                "phone_number": f"+{WHATSAPP_SUPORTE}",
-                            }],
-                            "payments": [{
-                                "type": "balance",
-                                "currency": "EUR",
-                                "amount": v["valor_bruto_duffel"],
-                            }],
-                        }
-                    }
+                    if not v.get("pax_ids"):
+                        st.error("Não foi possível localizar o passageiro da oferta. Faça uma nova busca.")
+                        st.stop()
 
-                    res_ordem = requests.post(
-                        "https://api.duffel.com/air/orders",
-                        headers=headers,
-                        json=payload,
-                        timeout=60,
+                    res_ordem = criar_ordem_duffel(
+                        offer_id=v["id_offer"],
+                        pax_id=v["pax_ids"][0],
+                        titulo=tit_code,
+                        nome=nome,
+                        apelido=apelido,
+                        genero=gen_code,
+                        nascimento=dn,
+                        email=email,
                     )
 
                     if res_ordem.status_code == 201:
@@ -727,20 +1103,17 @@ elif st.session_state.pagina == "reserva":
                         documentos = dados_reserva.get("documents", [])
                         link_pdf_oficial = documentos[0]["url"] if documentos else ""
 
-                        itinerario_venda = f"{origem_p} ➔ {destino_p}"
-                        valor_venda = f"{v['Moeda']} {v['Preço']:.2f}"
+                        itinerario_venda = itinerario_curto
+                        valor_venda = money_fmt(v["Moeda"], v["Preço"])
 
-                        sucesso_sheets = salvar_reserva_sheets(
+                        salvar_reserva_sheets(
                             f"{nome} {apelido}",
                             email,
                             pnr,
                             itinerario_venda,
                             valor_venda,
-                            link_pdf_oficial,
+                            link_pdf_oficial
                         )
-
-                        if sucesso_sheets:
-                            st.toast("Dados guardados na base de dados! ✅")
 
                         html_design = montar_email_confirmacao(
                             nome=f"{nome} {apelido}",
@@ -748,16 +1121,17 @@ elif st.session_state.pagina == "reserva":
                             companhia=v["Companhia"],
                             trechos=trechos,
                             valor_total=valor_venda,
+                            itinerario=itinerario_venda
                         )
 
                         enviar_email(
                             destinatario=email,
-                            assunto=f"Seu bilhete foi emitido! PNR: {pnr}",
+                            assunto=f"Bilhete emitido com sucesso • PNR {pnr}",
                             corpo_html=html_design,
                         )
 
                         st.success(f"✅ Bilhete emitido com sucesso! PNR: {pnr}")
-
+                        st.balloons()
                     else:
                         try:
                             erro_msg = res_ordem.json()["errors"][0]["message"]
@@ -768,43 +1142,71 @@ elif st.session_state.pagina == "reserva":
             except Exception as e:
                 st.error(f"Erro técnico na emissão: {e}")
 
-    if st.button("⬅️ Voltar"):
+    if st.button("⬅️ Voltar", use_container_width=True):
         st.session_state.pagina = "busca"
         st.rerun()
 
 
-# =========================
-# PÁGINA SUCESSO
-# =========================
+# =========================================================
+# PÁGINA SUCESSO PÓS-PAGAMENTO
+# =========================================================
 elif st.session_state.pagina == "sucesso":
-    st.balloons()
-    st.success("### 🎉 Pagamento Confirmado com Sucesso!")
+    st.markdown("""
+    <div class="agency-hero">
+        <h1>🎉 Pagamento Recebido</h1>
+        <p>Estamos a validar a transação e a preparar a próxima etapa da sua reserva.</p>
+    </div>
+    """, unsafe_allow_html=True)
 
-    nome_pax = st.query_params.get("nome", "Passageiro")
-    email_pax = st.query_params.get("email", "seu e-mail")
+    session_id = st.query_params.get("session_id", "")
 
-    with st.container(border=True):
-        st.markdown(f"""
-        **Olá {nome_pax},**
+    if not session_id:
+        st.error("Sessão de pagamento não encontrada na URL.")
+    else:
+        with st.spinner("A validar pagamento junto da Stripe..."):
+            dados_stripe = verificar_pagamento_stripe_por_session(session_id)
 
-        Recebemos o seu pagamento. A emissão do seu bilhete está a ser processada.
+        if dados_stripe.get("erro"):
+            st.error(f"Erro ao validar a Stripe: {dados_stripe['erro']}")
+        else:
+            payment_status = dados_stripe.get("payment_status", "")
+            checkout_status = dados_stripe.get("status", "")
+            email_cliente = dados_stripe.get("customer_email", "")
 
-        **O que verificar agora?**
-        1. Receberá um e-mail de confirmação em **{email_pax}**.
-        2. Depois receberá o bilhete com o PNR e detalhes do embarque.
-        3. Se precisar de ajuda, use o suporte abaixo.
-        """)
+            pagamento = obter_pagamento_por_session_id(session_id)
 
-        st.link_button(
-            "💬 Falar com Suporte (WhatsApp)",
-            f"https://wa.me/{WHATSAPP_SUPORTE}",
-            use_container_width=True,
-        )
+            if payment_status == "paid":
+                marcar_pagamento_como_pago(session_id, stripe_payment_status=payment_status)
+                st.session_state.pagamento_confirmado_atual = True
 
-    st.divider()
-    if st.button("Voltar ao Início", use_container_width=True):
-        st.session_state.pagina = "busca"
-        st.session_state.busca_feita = False
-        st.session_state.resultados_voos = []
-        st.session_state.voo_selecionado = None
-        st.rerun()
+                st.success("✅ Pagamento confirmado com sucesso.")
+                st.write(f"**Estado Stripe:** {checkout_status}")
+                if email_cliente:
+                    st.write(f"**E-mail do cliente:** {email_cliente}")
+
+                if pagamento:
+                    st.markdown('<div class="box-soft">', unsafe_allow_html=True)
+                    st.write(f"**Itinerário:** {pagamento.get('Itinerario', '')}")
+                    st.write(f"**Companhia:** {pagamento.get('Companhia', '')}")
+                    st.write(f"**Preço:** {pagamento.get('Moeda_Exibida', '')} {pagamento.get('Preco_Exibido', '')}")
+                    st.markdown('</div>', unsafe_allow_html=True)
+
+                st.info("Volte para a página da reserva para concluir a emissão do bilhete.")
+
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button("Ir para emissão", use_container_width=True, type="primary"):
+                        st.session_state.pagina = "reserva"
+                        st.rerun()
+                with col2:
+                    if st.button("Voltar ao início", use_container_width=True):
+                        st.session_state.pagina = "busca"
+                        st.rerun()
+
+            else:
+                st.warning("O pagamento ainda não aparece como confirmado na Stripe.")
+                st.write(f"**Estado Stripe:** {checkout_status}")
+                st.write(f"**Payment status:** {payment_status}")
+
+                if st.button("Atualizar verificação", use_container_width=True):
+                    st.rerun()
