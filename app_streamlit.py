@@ -1250,34 +1250,58 @@ elif st.session_state.pagina == "reserva":
 
     with col_dados:
         st.markdown("### 👤 Dados do Passageiro")
+
+        if "pax_titulo" not in st.session_state:
+            st.session_state["pax_titulo"] = "mr"
+
+        if "pax_genero" not in st.session_state:
+            st.session_state["pax_genero"] = "m"
+
         with st.form("form_pax"):
             c_tit, c_gen = st.columns(2)
-            titulo_input = c_tit.selectbox("Título", ["Senhor", "Senhora"])
-            genero_input = c_gen.selectbox("Gênero", ["Masculino", "Feminino"])
+            titulo_input = c_tit.selectbox(
+                "Título",
+                ["Senhor", "Senhora"],
+                index=0 if st.session_state.get("pax_titulo", "mr") == "mr" else 1,
+                key="form_pax_titulo_visivel",
+            )
+            genero_input = c_gen.selectbox(
+                "Gênero",
+                ["Masculino", "Feminino"],
+                index=0 if st.session_state.get("pax_genero", "m") == "m" else 1,
+                key="form_pax_genero_visivel",
+            )
 
             c1, c2 = st.columns(2)
-            nome_pax = c1.text_input("Nome", value=st.session_state.get("pax_nome", ""))
-            # garantir valores padrão necessários para emissão Duffel
-            if "pax_titulo" not in st.session_state:
-                st.session_state["pax_titulo"] = "mr"
+            nome_pax = c1.text_input(
+                "Nome",
+                value=st.session_state.get("pax_nome", ""),
+                key="form_pax_nome",
+            )
+            apelido_pax = c2.text_input(
+                "Apelido / Sobrenome",
+                value=st.session_state.get("pax_apelido", ""),
+                key="form_pax_apelido",
+            )
 
-            if "pax_genero" not in st.session_state:
-                st.session_state["pax_genero"] = "m"
-
-            apelido_pax = c2.text_input("Apelido / Sobrenome", value=st.session_state.get("pax_apelido", ""))
-
-            email_pax = st.text_input("E-mail", value=st.session_state.get("pax_email", ""))
-            apelido_pax = c2.text_input("Apelido / Sobrenome", value=st.session_state.get("pax_apelido", ""))
-
-            email_pax = st.text_input("E-mail", value=st.session_state.get("pax_email", ""))
+            email_pax = st.text_input(
+                "E-mail",
+                value=st.session_state.get("pax_email", ""),
+                key="form_pax_email",
+            )
 
             c3, c4 = st.columns(2)
-            documento_id = c3.text_input("CPF / Cartão de Cidadão", value=st.session_state.get("pax_documento", ""))
+            documento_id = c3.text_input(
+                "CPF / Cartão de Cidadão",
+                value=st.session_state.get("pax_documento", ""),
+                key="form_pax_documento",
+            )
             nasc_pax = c4.date_input(
                 "Data de Nascimento",
                 value=datetime(1995, 1, 1),
                 min_value=datetime(1920, 1, 1),
                 max_value=datetime.today(),
+                key="form_pax_nascimento",
             )
 
             precisa_passaporte = v.get("Internacional", False)
@@ -1287,10 +1311,15 @@ elif st.session_state.pagina == "reserva":
             if precisa_passaporte:
                 st.warning("⚠️ Voo internacional: passaporte obrigatório")
                 cp1, cp2 = st.columns(2)
-                passaporte = cp1.text_input("Número do Passaporte", value=st.session_state.get("pax_passaporte", ""))
+                passaporte = cp1.text_input(
+                    "Número do Passaporte",
+                    value=st.session_state.get("pax_passaporte", ""),
+                    key="form_pax_passaporte",
+                )
                 validade_passaporte = cp2.date_input(
                     "Validade do Passaporte",
                     value=datetime.today() + timedelta(days=365),
+                    key="form_pax_validade_passaporte",
                 )
 
             submitted = st.form_submit_button("✅ VALIDAR DADOS", use_container_width=True)
@@ -1324,10 +1353,10 @@ elif st.session_state.pagina == "reserva":
                     st.session_state["pax_passaporte"] = passaporte.strip() if passaporte else ""
                     st.session_state["pax_validade_passaporte"] = str(validade_passaporte) if validade_passaporte else ""
 
-                    st.session_state["pax_titulo"] = st.session_state.get("pax_titulo", "mr")
-                    st.session_state["pax_genero"] = st.session_state.get("pax_genero", "m")
+                    st.session_state["pax_titulo"] = "mr" if titulo_input == "Senhor" else "mrs"
+                    st.session_state["pax_genero"] = "m" if genero_input == "Masculino" else "f"
 
-    st.success("Dados validados com sucesso.")
+                    st.success("Dados validados com sucesso.")
 
     with col_resumo:
         st.markdown("### 💳 Resumo e Pagamento")
@@ -1353,26 +1382,26 @@ elif st.session_state.pagina == "reserva":
         else:
             if not pagamento_ok:
                 if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
-                     url_checkout = criar_checkout_stripe(
-                         valor_eur=float(v["valor_bruto_duffel"]),
-                         nome_pax=st.session_state["pax_nome"],
-                         apelido_pax=st.session_state["pax_apelido"],
-                         email_pax=st.session_state["pax_email"],
-                         itinerario=itinerario_curto,
-                         offer_id=v["id_offer"],
-                         companhia=v["Companhia"],
-                         preco_exibido=v["Preço"],
-                         moeda_exibida=v["Moeda"],
-                         trechos=trechos,
-                         pax_ids=v.get("pax_ids", []),
-                         titulo=st.session_state.get("pax_titulo"),
-                         genero=st.session_state.get("pax_genero"),
-                         data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
-                         documento=st.session_state.get("pax_documento"),
-                         passaporte=st.session_state.get("pax_passaporte"),
-                         validade_passaporte=st.session_state.get("pax_validade_passaporte"),
-                     )
-                     if url_checkout:
+                    url_checkout = criar_checkout_stripe(
+                        valor_eur=float(v["valor_bruto_duffel"]),
+                        nome_pax=st.session_state["pax_nome"],
+                        apelido_pax=st.session_state["pax_apelido"],
+                        email_pax=st.session_state["pax_email"],
+                        itinerario=itinerario_curto,
+                        offer_id=v["id_offer"],
+                        companhia=v["Companhia"],
+                        preco_exibido=v["Preço"],
+                        moeda_exibida=v["Moeda"],
+                        trechos=trechos,
+                        pax_ids=v.get("pax_ids", []),
+                        titulo=st.session_state.get("pax_titulo"),
+                        genero=st.session_state.get("pax_genero"),
+                        data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
+                        documento=st.session_state.get("pax_documento"),
+                        passaporte=st.session_state.get("pax_passaporte"),
+                        validade_passaporte=st.session_state.get("pax_validade_passaporte"),
+                    )
+                    if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
             else:
@@ -1434,7 +1463,7 @@ elif st.session_state.pagina == "reserva":
                             link_pdf_oficial
                         )
 
-                        bagagem_info = None  # por enquanto; depois podemos enriquecer com dados reais da Duffel
+                        bagagem_info = None
 
                         html_design = montar_email_bilhete_emitido(
                             nome_passageiro=f"{nome} {apelido}",
@@ -1468,7 +1497,6 @@ elif st.session_state.pagina == "reserva":
     if st.button("⬅️ Voltar", use_container_width=True):
         st.session_state.pagina = "busca"
         st.rerun()
-
 
 # =========================================================
 # PÁGINA SUCESSO PÓS-PAGAMENTO
