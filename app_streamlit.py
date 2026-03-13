@@ -4,12 +4,12 @@ from datetime import datetime, timedelta
 
 import gspread
 import requests
+import smtplib
 import streamlit as st
 import stripe
-from oauth2client.service_account import ServiceAccountCredentials
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import smtplib
+from oauth2client.service_account import ServiceAccountCredentials
 
 
 # =========================================================
@@ -18,6 +18,7 @@ import smtplib
 COMISSAO_PERCENTUAL = 0.12
 WHATSAPP_SUPORTE = "351936797003"
 NOME_PLANILHA = "Alertas_Flight_Monitor"
+NOME_AGENCIA = "Flight Monitor Premium"
 
 AEROPORTOS = {
     "São Paulo (GRU)": "GRU",
@@ -86,91 +87,261 @@ AEROPORTOS_BRASIL = {
 
 
 # =========================================================
-# ESTILO
+# TEMAS
 # =========================================================
-def aplicar_estilo():
-    st.markdown("""
+def obter_temas():
+    return {
+        "Sky Light": {
+            "bg": "#f5f9ff",
+            "card": "#ffffff",
+            "text": "#0f172a",
+            "muted": "#667085",
+            "border": "#dbe7f5",
+            "primary": "#0a66c2",
+            "secondary": "#003580",
+            "accent": "#38bdf8",
+            "success_bg": "#ecfdf3",
+            "success_text": "#027a48",
+            "hero_grad_1": "#003580",
+            "hero_grad_2": "#0057b8",
+            "sidebar_bg": "#eef5ff",
+            "warning_bg": "#fff7ed",
+            "warning_text": "#c2410c",
+        },
+        "Midnight Luxury": {
+            "bg": "#0b0b0f",
+            "card": "#151821",
+            "text": "#f3f4f6",
+            "muted": "#9ca3af",
+            "border": "#272b36",
+            "primary": "#b91c1c",
+            "secondary": "#7f1d1d",
+            "accent": "#ef4444",
+            "success_bg": "#13261c",
+            "success_text": "#86efac",
+            "hero_grad_1": "#111111",
+            "hero_grad_2": "#7f1d1d",
+            "sidebar_bg": "#111318",
+            "warning_bg": "#2a1812",
+            "warning_text": "#fdba74",
+        },
+        "Executive Dark Blue": {
+            "bg": "#0f172a",
+            "card": "#162033",
+            "text": "#f8fafc",
+            "muted": "#cbd5e1",
+            "border": "#263247",
+            "primary": "#2563eb",
+            "secondary": "#1d4ed8",
+            "accent": "#60a5fa",
+            "success_bg": "#0f2c22",
+            "success_text": "#6ee7b7",
+            "hero_grad_1": "#0f172a",
+            "hero_grad_2": "#1d4ed8",
+            "sidebar_bg": "#131d31",
+            "warning_bg": "#332701",
+            "warning_text": "#fcd34d",
+        },
+        "Classic Agency": {
+            "bg": "#fcfcfd",
+            "card": "#ffffff",
+            "text": "#111827",
+            "muted": "#6b7280",
+            "border": "#e5e7eb",
+            "primary": "#1d4ed8",
+            "secondary": "#1e3a8a",
+            "accent": "#c8a96b",
+            "success_bg": "#eefbf3",
+            "success_text": "#15803d",
+            "hero_grad_1": "#1e3a8a",
+            "hero_grad_2": "#1d4ed8",
+            "sidebar_bg": "#f8fafc",
+            "warning_bg": "#fff7ed",
+            "warning_text": "#c2410c",
+        },
+    }
+
+
+def aplicar_estilo(tema_nome="Sky Light"):
+    temas = obter_temas()
+    tema = temas.get(tema_nome, temas["Sky Light"])
+
+    st.markdown(f"""
     <style>
-    .block-container {
+    .stApp {{
+        background: {tema['bg']};
+        color: {tema['text']};
+    }}
+
+    [data-testid="stSidebar"] {{
+        background: {tema['sidebar_bg']};
+        border-right: 1px solid {tema['border']};
+    }}
+
+    .block-container {{
         padding-top: 1.2rem;
         padding-bottom: 2rem;
         max-width: 1280px;
-    }
-    .agency-hero {
-        background: linear-gradient(135deg, #003580, #0057b8);
+    }}
+
+    .agency-hero {{
+        background: linear-gradient(135deg, {tema['hero_grad_1']}, {tema['hero_grad_2']});
         color: white;
-        padding: 28px;
-        border-radius: 20px;
+        padding: 30px;
+        border-radius: 22px;
         margin-bottom: 18px;
-        box-shadow: 0 10px 30px rgba(0,0,0,0.12);
-    }
-    .agency-hero h1 {
+        box-shadow: 0 12px 30px rgba(0,0,0,0.16);
+    }}
+
+    .agency-hero h1 {{
         margin: 0 0 8px 0;
         font-size: 2rem;
-    }
-    .agency-hero p {
+    }}
+
+    .agency-hero p {{
         margin: 0;
         opacity: 0.95;
         font-size: 1rem;
-    }
-    .agency-card {
-        background: white;
-        border: 1px solid #e8edf5;
-        border-radius: 18px;
+    }}
+
+    .agency-card {{
+        background: {tema['card']};
+        border: 1px solid {tema['border']};
+        border-radius: 20px;
         padding: 18px;
-        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+        box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08);
         margin-bottom: 14px;
-    }
-    .small-muted {
-        color: #667085;
+        color: {tema['text']};
+    }}
+
+    .small-muted {{
+        color: {tema['muted']};
         font-size: 0.92rem;
-    }
-    .price-big {
+    }}
+
+    .price-big {{
         font-size: 2rem;
         font-weight: 700;
-        color: #0f172a;
-    }
-    .badge-ok {
+        color: {tema['text']};
+    }}
+
+    .badge-ok {{
         display: inline-block;
-        padding: 6px 11px;
-        background: #ecfdf3;
-        color: #027a48;
+        padding: 7px 12px;
+        background: {tema['success_bg']};
+        color: {tema['success_text']};
         border-radius: 999px;
         font-size: 0.82rem;
         font-weight: 700;
         margin-bottom: 8px;
-    }
-    .box-soft {
-        background: #f8fafc;
-        border: 1px solid #e2e8f0;
-        border-radius: 14px;
+    }}
+
+    .badge-warning {{
+        display: inline-block;
+        padding: 7px 12px;
+        background: {tema['warning_bg']};
+        color: {tema['warning_text']};
+        border-radius: 999px;
+        font-size: 0.82rem;
+        font-weight: 700;
+        margin-bottom: 8px;
+    }}
+
+    .box-soft {{
+        background: {tema['card']};
+        border: 1px solid {tema['border']};
+        border-radius: 16px;
         padding: 14px;
-    }
-    .section-title {
+        color: {tema['text']};
+    }}
+
+    .section-title {{
         margin-top: 8px;
         margin-bottom: 10px;
         font-weight: 700;
-        color: #0f172a;
-    }
+        color: {tema['text']};
+    }}
+
+    div[data-testid="stMetric"] {{
+        background: {tema['card']};
+        border: 1px solid {tema['border']};
+        padding: 12px;
+        border-radius: 16px;
+    }}
+
+    div[data-testid="stForm"] {{
+        background: {tema['card']};
+        border: 1px solid {tema['border']};
+        padding: 18px;
+        border-radius: 18px;
+    }}
+
+    .stButton > button {{
+        background: {tema['primary']};
+        color: white;
+        border: none;
+        border-radius: 12px;
+        font-weight: 600;
+    }}
+
+    .stButton > button:hover {{
+        background: {tema['secondary']};
+        color: white;
+    }}
+
+    .stDownloadButton > button {{
+        background: {tema['primary']};
+        color: white;
+        border-radius: 12px;
+        border: none;
+    }}
+
+    .stTextInput input,
+    .stDateInput input,
+    .stTextArea textarea,
+    .stNumberInput input {{
+        background: {tema['card']} !important;
+        color: {tema['text']} !important;
+        border-radius: 12px !important;
+    }}
+
+    .stSelectbox div[data-baseweb="select"] > div {{
+        background: {tema['card']} !important;
+        color: {tema['text']} !important;
+        border-radius: 12px !important;
+    }}
+
+    .stRadio > div {{
+        background: transparent !important;
+        color: {tema['text']} !important;
+    }}
+
+    h1, h2, h3, h4, h5, h6, p, label, span, div {{
+        color: inherit;
+    }}
     </style>
     """, unsafe_allow_html=True)
 
 
 # =========================================================
-# VALIDAÇÕES
+# VALIDAÇÕES E HELPERS
 # =========================================================
 def email_valido(email: str) -> bool:
     padrao = r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
     return re.match(padrao, email.strip()) is not None
 
+
 def nome_valido(nome: str) -> bool:
     return len(nome.strip()) >= 2
+
 
 def documento_valido(doc: str) -> bool:
     return len(doc.strip()) >= 5
 
+
 def limpar_texto(valor: str) -> str:
     return str(valor).strip()
+
 
 def money_fmt(moeda: str, valor: float) -> str:
     return f"{moeda} {valor:.2f}"
@@ -193,6 +364,7 @@ def conectar_sheets():
         st.error(f"Erro ao conectar ao Google Sheets: {e}")
         return None
 
+
 def obter_ou_criar_aba(planilha, nome_aba, cabecalho):
     try:
         try:
@@ -204,6 +376,7 @@ def obter_ou_criar_aba(planilha, nome_aba, cabecalho):
     except Exception as e:
         st.error(f"Erro ao preparar a aba '{nome_aba}': {e}")
         return None
+
 
 def garantir_abas():
     planilha = conectar_sheets()
@@ -230,6 +403,7 @@ def garantir_abas():
         ]
     )
 
+
 def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
     planilha = conectar_sheets()
     if not planilha:
@@ -247,6 +421,7 @@ def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor, link_pdf
     except Exception as e:
         st.error(f"Erro ao gravar reserva no Sheets: {e}")
         return False
+
 
 def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     planilha = conectar_sheets()
@@ -283,6 +458,7 @@ def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
         st.error(f"Erro ao buscar reserva: {e}")
         return None
 
+
 def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
     planilha = conectar_sheets()
     if not planilha:
@@ -300,6 +476,7 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
     except Exception as e:
         st.error(f"Erro ao gravar alerta: {e}")
         return False
+
 
 def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido, offer_id, itinerario, companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos):
     planilha = conectar_sheets()
@@ -339,6 +516,7 @@ def registrar_pagamento_pendente(session_id, checkout_url, email, nome, apelido,
         st.error(f"Erro ao registrar pagamento pendente: {e}")
         return False
 
+
 def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
     planilha = conectar_sheets()
     if not planilha:
@@ -361,6 +539,7 @@ def marcar_pagamento_como_pago(session_id, stripe_payment_status="paid"):
         st.error(f"Erro ao marcar pagamento como pago: {e}")
         return False
 
+
 def obter_pagamento_por_session_id(session_id):
     planilha = conectar_sheets()
     if not planilha:
@@ -382,6 +561,7 @@ def obter_pagamento_por_session_id(session_id):
     except Exception as e:
         st.error(f"Erro ao obter pagamento: {e}")
         return None
+
 
 def pagamento_confirmado(email, offer_id):
     planilha = conectar_sheets()
@@ -432,6 +612,7 @@ def enviar_email(destinatario, assunto, corpo_html):
         st.error(f"Erro ao enviar e-mail: {e}")
         return False
 
+
 def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total, itinerario):
     blocos = []
 
@@ -476,7 +657,7 @@ def montar_email_confirmacao(nome, pnr, companhia, trechos, valor_total, itinera
             </div>
 
             <div style="padding: 18px; text-align:center; background:#111827; color:#d1d5db; font-size: 12px;">
-                © {datetime.now().year} Flight Monitor
+                © {datetime.now().year} {NOME_AGENCIA}
             </div>
         </div>
     </body>
@@ -495,6 +676,7 @@ def get_cotacao_ao_vivo():
         return 6.02
     except Exception:
         return 6.02
+
 
 def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id, companhia, preco_exibido, moeda_exibida, trechos):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
@@ -547,6 +729,7 @@ def criar_checkout_stripe(valor_eur, nome_pax, apelido_pax, email_pax, itinerari
         st.error(f"Erro na Stripe: {e}")
         return None
 
+
 def verificar_pagamento_stripe_por_session(session_id):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     try:
@@ -559,6 +742,7 @@ def verificar_pagamento_stripe_por_session(session_id):
         }
     except Exception as e:
         return {"erro": str(e)}
+
 
 def criar_ordem_duffel(offer_id, pax_id, titulo, nome, apelido, genero, nascimento, email):
     api_token = st.secrets["DUFFEL_TOKEN"]
@@ -596,20 +780,22 @@ def criar_ordem_duffel(offer_id, pax_id, titulo, nome, apelido, genero, nascimen
 
 
 # =========================================================
-# HELPERS DE UI
+# UI HELPERS
 # =========================================================
 def hero_home():
-    st.markdown("""
+    st.markdown(f"""
     <div class="agency-hero">
-        <h1>✈️ Encontre e emita a sua próxima viagem com segurança</h1>
-        <p>Tarifas em tempo real, apoio humano e um processo de reserva com aparência profissional.</p>
+        <h1>✈️ {NOME_AGENCIA}</h1>
+        <p>Tarifas em tempo real, pagamento seguro e apoio especializado para a sua próxima viagem.</p>
     </div>
     """, unsafe_allow_html=True)
 
-    c1, c2, c3 = st.columns(3)
+    c1, c2, c3, c4 = st.columns(4)
     c1.markdown('<div class="badge-ok">Pagamento Seguro</div>', unsafe_allow_html=True)
-    c2.markdown('<div class="badge-ok">Suporte via WhatsApp</div>', unsafe_allow_html=True)
-    c3.markdown('<div class="badge-ok">Emissão após confirmação</div>', unsafe_allow_html=True)
+    c2.markdown('<div class="badge-ok">Atendimento Humanizado</div>', unsafe_allow_html=True)
+    c3.markdown('<div class="badge-ok">Emissão Assistida</div>', unsafe_allow_html=True)
+    c4.markdown('<div class="badge-ok">Suporte Pós-Venda</div>', unsafe_allow_html=True)
+
 
 def render_card_voo(v, idx):
     trechos = v.get("Trechos", [])
@@ -627,25 +813,39 @@ def render_card_voo(v, idx):
 
     with col1:
         st.markdown(f"**{v['Companhia']}**")
-        st.markdown('<span class="small-muted">Tarifa disponível agora</span>', unsafe_allow_html=True)
+        st.markdown('<span class="small-muted">Tarifa disponível no momento</span>', unsafe_allow_html=True)
+        if v.get("Internacional"):
+            st.caption("🌍 Voo internacional")
+        else:
+            st.caption("✈️ Voo doméstico/regional")
 
     with col2:
         st.markdown(f"### {ida_origem} ➔ {ida_destino}")
-        st.markdown(f'<div class="small-muted">Saída às {ida_partida} • Chegada às {ida_chegada}</div>', unsafe_allow_html=True)
+        st.markdown(
+            f'<div class="small-muted">Partida às {ida_partida} • Chegada às {ida_chegada}</div>',
+            unsafe_allow_html=True
+        )
 
         if len(trechos) > 1:
             volta = trechos[1]
-            st.markdown(f'<div class="small-muted" style="margin-top: 6px;">Retorno: {volta[0]["de"]} ({volta[0]["partida"]}) ➔ {volta[-1]["para"]} ({volta[-1]["chegada"]})</div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="small-muted" style="margin-top: 6px;">Retorno: {volta[0]["de"]} ({volta[0]["partida"]}) ➔ {volta[-1]["para"]} ({volta[-1]["chegada"]})</div>',
+                unsafe_allow_html=True
+            )
 
-        with st.expander("Ver detalhes do itinerário"):
+        with st.expander("Ver escalas, companhia e aeronaves"):
             for i, fatia in enumerate(trechos, start=1):
                 st.write(f"**Trecho {i}**")
                 for seg in fatia:
-                    st.write(f"✈️ {seg['cia']} | {seg['de']} ➔ {seg['para']} | {seg['partida']} → {seg['chegada']} | {seg['aviao']}")
+                    st.write(
+                        f"✈️ {seg['cia']} | {seg['de']} ➔ {seg['para']} | {seg['partida']} → {seg['chegada']} | {seg['aviao']}"
+                    )
 
     with col3:
         st.markdown(f'<div class="price-big">{v["Moeda"]} {v["Preço"]:.2f}</div>', unsafe_allow_html=True)
-        st.markdown('<div class="small-muted">Taxas e margem já incluídas</div>', unsafe_allow_html=True)
+        st.markdown('<div class="small-muted">Taxas incluídas</div>', unsafe_allow_html=True)
+        st.caption("Sujeito à disponibilidade")
+
         if st.button("SELECIONAR", key=f"sel_{idx}", type="primary", use_container_width=True):
             st.session_state.voo_selecionado = v
             st.session_state.pagina = "reserva"
@@ -654,12 +854,39 @@ def render_card_voo(v, idx):
     st.markdown('</div>', unsafe_allow_html=True)
 
 
+def mostrar_blocos_confianca():
+    st.markdown("### Por que reservar connosco?")
+    c1, c2, c3 = st.columns(3)
+
+    with c1:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>🔐 Pagamento Protegido</h4>
+            <p class="small-muted">Processamento seguro via Stripe, com validação antes da emissão.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c2:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>📩 Confirmação por E-mail</h4>
+            <p class="small-muted">Receba o localizador, itinerário e detalhes do voo no seu e-mail.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+    with c3:
+        st.markdown("""
+        <div class="agency-card">
+            <h4>💬 Apoio Especializado</h4>
+            <p class="small-muted">Suporte via WhatsApp para alterações, dúvidas e acompanhamento.</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+
 # =========================================================
-# APP STREAMLIT
+# APP CONFIG
 # =========================================================
 st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
-aplicar_estilo()
-garantir_abas()
 
 if "pagina" not in st.session_state:
     st.session_state.pagina = "busca"
@@ -673,19 +900,36 @@ if "reserva_ativa" not in st.session_state:
     st.session_state.reserva_ativa = None
 if "pagamento_confirmado_atual" not in st.session_state:
     st.session_state.pagamento_confirmado_atual = False
+if "tema_visual" not in st.session_state:
+    st.session_state.tema_visual = "Sky Light"
+
+tema_url = st.query_params.get("tema")
+if tema_url in obter_temas():
+    st.session_state.tema_visual = tema_url
+
+aplicar_estilo(st.session_state.tema_visual)
+garantir_abas()
 
 if st.query_params.get("pagamento") == "sucesso":
     st.session_state.pagina = "sucesso"
 
 with st.sidebar:
     st.title("📌 Flight Monitor")
+
+    tema_escolhido = st.selectbox(
+        "🎨 Estilo visual",
+        options=list(obter_temas().keys()),
+        index=list(obter_temas().keys()).index(st.session_state.tema_visual)
+    )
+    st.session_state.tema_visual = tema_escolhido
+
     if st.button("🔍 Procurar Voos", use_container_width=True):
         st.session_state.pagina = "busca"
+
     if st.button("👤 Área do Cliente", use_container_width=True):
         st.session_state.pagina = "login"
 
     st.divider()
-    st.markdown("**Confiança para o cliente**")
     st.caption("Pagamento seguro • emissão rápida • apoio humanizado")
     st.markdown(f"**Suporte:** [WhatsApp](https://wa.me/{WHATSAPP_SUPORTE})")
 
@@ -695,6 +939,7 @@ with st.sidebar:
 # =========================================================
 if st.session_state.pagina == "busca":
     hero_home()
+    mostrar_blocos_confianca()
 
     if st.button("Limpar Cache e Nova Busca"):
         st.session_state.resultados_voos = []
@@ -703,6 +948,7 @@ if st.session_state.pagina == "busca":
         st.session_state.pagamento_confirmado_atual = False
         st.rerun()
 
+    st.markdown("## Pesquisar voos")
     opcoes_cidades = list(AEROPORTOS.keys())
     tipo_v = st.radio("Tipo de viagem", ["Apenas Ida", "Ida e Volta"], horizontal=True)
 
