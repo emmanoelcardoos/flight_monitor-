@@ -257,6 +257,36 @@ if st.session_state.pagina == "busca":
                         st.session_state.voo_selecionado, st.session_state.pagina = v, "reserva"
                         st.rerun()
 
+                        # --- BLOCO DE ALERTA DE PREÇO (REINTEGRADO) ---
+        st.divider()
+        st.subheader("🔔 Não Encontrou o Preço que Querias?")
+        st.write("Inscreva-se nos nossos alertas e receba notificações no teu email sempre que o preço do teu voo baixar!")
+        
+        with st.expander("Criar Alerta de Preço"):
+            col_al1, col_al2 = st.columns([2, 1])
+            email_alerta = col_al1.text_input("Seu e-mail para o alerta", key="email_alerta_input_final")
+            
+            # Pegamos o menor preço da busca atual (o primeiro da lista ordenada)
+            menor_preco = st.session_state.resultados_voos[0]['Preço']
+            moeda_txt = st.session_state.resultados_voos[0]['Moeda']
+            
+            if st.button("Ativar Alerta de Preço", use_container_width=True):
+                if email_alerta:
+                    itinerario_txt = f"{origem} para {destino}"
+                    sucesso = salvar_alerta_preco(
+                        email_alerta, 
+                        itinerario_txt, 
+                        origem, 
+                        destino, 
+                        data_ida, 
+                        menor_preco, 
+                        moeda_txt
+                    )
+                    if sucesso:
+                        st.success(f"✅ Alerta Guardado! Avisaremos em {email_alerta}")
+                    else:
+                        st.error("Erro ao gravar na folha de Alertas.")
+
 elif st.session_state.pagina == "reserva":
     v = st.session_state.get('voo_selecionado')
     if not v: st.session_state.pagina = "busca"; st.rerun()
