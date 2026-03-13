@@ -11,29 +11,76 @@ import stripe
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 
-def conectar_sheets():
-    try:
-        # Pega as credenciais das Secrets do Streamlit
-        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-        creds_dict = st.secrets["gspread"]
-        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
-        client = gspread.authorize(creds)
-        
-        # Abre a folha (certifica-te que o nome está igual ao que criaste no Drive)
-        return client.open("Reservas_FlightMonitor")
-    except Exception as e:
-        st.error(f"Erro ao conectar ao Google Sheets: {e}")
-        return None
 
-def salvar_alerta_preco(email, origem, destino, preco_alvo):
+
+def buscar_reserva_por_pnr(email_cliente, pnr_cliente):
     planilha = conectar_sheets()
     if planilha:
         try:
-            aba = planilha.worksheet("Alertas") # Nome da aba dentro do arquivo
-            aba.append_row([datetime.now().strftime("%d/%m/%Y %H:%M"), email, origem, destino, preco_alvo])
+            aba = planilha.worksheet("Reservas_Confirmadas")
+            todas_as_reservas = aba.get_all_records() # Lê a tabela toda
+            
+            for reserva in todas_as_reservas:
+                # Verificamos se o PNR e o Email coincidem
+                if str(reserva['PNR']).strip().upper() == pnr_cliente.strip().upper() and \
+                   reserva['Email'].strip().lower() == email_cliente.strip().lower():
+                    return reserva # Retorna os dados da linha encontrada
+            return None
+        except Exception as e:
+            st.error(f"Erro ao buscar na base de dados: {e}")
+            return None
+
+def conectar_sheets():
+    try:
+        scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+        # Certifica-te que 'gspread' está configurado nos Secrets do Streamlit
+        creds_dict = st.secrets["gspread"]
+        creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
+        client = gspread.authorize(creds)
+        # USA O NOME EXATO DA TUA FOLHA
+        return client.open("Alertas_Flight_Monitor")
+    except Exception as e:
+        st.error(f"Erro ao conectar ao Google Sheets: {e}")
+        return None
+    
+
+def salvar_reserva_sheets(nome_completo, email, pnr, itinerario, valor):
+    planilha = conectar_sheets() # Usa a função que já criamos
+    if planilha:
+        try:
+            # Seleciona a aba que você acabou de criar manualmente
+            aba = planilha.worksheet("Reservas_Confirmadas")
+            
+            data_hora = datetime.now().strftime("%d/%m/%Y %H:%M")
+            
+            # Adiciona a linha com os dados da venda
+            aba.append_row([
+                data_hora, 
+                nome_completo, 
+                email, 
+                pnr, 
+                itinerario, 
+                f"€ {valor:.2f}", 
+                "Emitido"
+            ])
             return True
-        except:
-            # Se a aba não existir, podemos criar ou avisar
+        except Exception as e:
+            st.error(f"Erro ao gravar na aba Reservas_Confirmadas: {e}")
+            return False
+
+def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inicial, moeda):
+    planilha = conectar_sheets()
+    if planilha:
+        try:
+            # Pega a primeira aba (aba 1)
+            aba = planilha.get_worksheet(0) 
+            # Segue a ordem das colunas da sua foto: 
+            # email, itinerario, origem, destino, data, data_volta, adultos, criancas, bebes, preco_inicial, moeda
+            nova_linha = [email, itinerario, origem, destino, str(data_ida), "", 1, 0, 0, preco_inicial, moeda]
+            aba.append_row(nova_linha)
+            return True
+        except Exception as e:
+            st.error(f"Erro ao gravar: {e}")
             return False
 
 def criar_checkout_stripe(valor_eur, nome_pax, email_pax, itinerario, offer_id):
@@ -314,35 +361,34 @@ if st.session_state.pagina == "busca":
                     st.session_state.voo_selecionado = v
                     st.session_state.pagina = "reserva"
                     st.rerun()
+        # --- BLOCO DE ALERTA DE PREÇO NA PÁGINA 1 ---
         st.divider()
         st.subheader("🔔 Não encontrou o preço ideal?")
         with st.expander("Criar Alerta de Preço"):
             col_al1, col_al2 = st.columns([2, 1])
             email_alerta = col_al1.text_input("Seu e-mail para o alerta", key="email_alerta_input")
             
-            # Sugerimos um preço 10% menor que o menor voo encontrado
+            # Pegamos o menor preço da busca atual
             menor_preco = st.session_state.resultados_voos[0]['Preço']
-            preco_desejado = col_al2.number_input(
-                "Avisar abaixo de (€):", 
-                value=float(menor_preco * 0.9),
-                key="preco_alerta_input"
-            )
+            moeda_txt = st.session_state.resultados_voos[0]['Moeda']
             
             if st.button("Ativar Alerta de Preço", use_container_width=True):
                 if email_alerta:
-                    # Tenta salvar no Sheets
+                    itinerario_txt = f"{origem} para {destino}"
+                    # Chamada da função com os dados da sua planilha
                     sucesso = salvar_alerta_preco(
                         email_alerta, 
-                        origem, # Variável da sua busca
-                        destino, # Variável da sua busca
-                        preco_desejado
+                        itinerario_txt, 
+                        origem, 
+                        destino, 
+                        data_ida, 
+                        menor_preco, 
+                        moeda_txt
                     )
                     if sucesso:
-                        st.success(f"✅ Alerta configurado! Avisaremos em {email_alerta} quando baixar de €{preco_desejado:.2f}")
+                        st.success(f"✅ Alerta guardado na folha! Avisaremos em {email_alerta}")
                     else:
-                        st.error("Erro ao conectar com a base de dados. Verifique as permissões do Sheets.")
-                else:
-                    st.warning("Por favor, insira um e-mail válido.")
+                        st.error("Erro ao gravar na folha. Verifique as permissões.")
         # =========================================================
 
     elif st.session_state.get('busca_feita'): 
@@ -497,7 +543,12 @@ elif st.session_state.pagina == "reserva":
                     res_ordem = requests.post("https://api.duffel.com/air/orders", headers=headers, json=payload)
 
                     if res_ordem.status_code == 201:
+                        dados_reserva = res_ordem.json()['data']
                         pnr = res_ordem.json()['data']['booking_reference']
+                        itinerario_venda = f"{v['Segmentos'][0]['de']} ➔ {v['Segmentos'][-1]['para']}"
+                        salvar_reserva_sheets(f"{nome} {apelido}", email, pnr, itinerario_venda, v['Preço'])
+
+
                         # Design do E-mail 2 (O seu design estilo Decolar que já estava no código)
                         # --- MONTAGEM DO DESIGN DO EMAIL (PADRÃO DECOLAR) ---
                         html_design = f"""
@@ -576,40 +627,37 @@ elif st.session_state.pagina == "reserva":
                 st.error(f"Erro técnico na emissão: {e}")
 
 # --- PÁGINA 3: LOGIN (ADMIN / EMISSÃO MANUAL) ---
+
 elif st.session_state.pagina == "login":
     st.title("✈️ Área do Passageiro")
-    st.subheader("Gerencie sua viagem")
-
+    
     with st.container(border=True):
-        email_login = st.text_input("E-mail utilizado na compra")
-        pnr_login = st.text_input("Código de Reserva (PNR)")
+        email_login = st.text_input("E-mail da reserva")
+        pnr_login = st.text_input("Código PNR")
         
-        if st.button("Aceder à Minha Reserva"):
-            # Aqui faremos a busca no Google Sheets futuramente
-            # Por enquanto, simulamos encontrar a reserva
-            if email_login and pnr_login:
-                st.session_state.reserva_ativa = True
-                st.success("Reserva localizada!")
-            else:
-                st.error("Dados não encontrados. Verifique seu e-mail e PNR.")
-
-    if st.session_state.get("reserva_ativa"):
-        st.divider()
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### 📋 Seus Dados")
-            st.info(f"**Passageiro:** {st.session_state.get('pax_nome', 'Usuário')}")
-            if st.button("✏️ Alterar Dados Pessoais"):
-                st.info("Funcionalidade em desenvolvimento: Abrirá formulário de edição.")
-        
-        with col2:
-            st.markdown("### ✈️ Gestão do Voo")
-            # Exemplo de link para o PDF (que você gerará ou salvará o link do Sheets)
-            st.link_button("📄 Baixar Itinerário (PDF)", "https://seusite.com/pdf_exemplo")
+        if st.button("Ver Minha Viagem"):
+            reserva = buscar_reserva_por_pnr(email_login, pnr_login)
             
-            if st.button("🔄 Solicitar Alteração de Voo"):
-                st.warning("O pedido de alteração será enviado à nossa central.")
-                
-            if st.button("❌ Cancelar Reserva", type="secondary"):
-                st.error("Atenção: Cancelamentos estão sujeitos a taxas da companhia aérea.")
+            if reserva:
+                st.session_state.dados_reserva_logada = reserva
+                st.success("Reserva encontrada!")
+            else:
+                st.error("Reserva não encontrada. Verifique os dados.")
+
+    # Se encontrar a reserva na folha, mostra os detalhes
+    if st.session_state.get("dados_reserva_logada"):
+        res = st.session_state.dados_reserva_logada
+        st.divider()
+        st.markdown(f"### Olá, {res['Passageiro']}!")
+        
+        col1, col2 = st.columns(2)
+        col1.metric("Status", res['Status'])
+        col2.metric("Valor Pago", res['Valor'])
+        
+        st.info(f"📍 **Itinerário:** {res['Itinerário']}")
+        
+        st.subheader("🛠️ O que deseja fazer?")
+        c1, c2, c3 = st.columns(3)
+        c1.button("📄 Baixar PDF")
+        c2.button("🔄 Alterar Voo")
+        c3.button("❌ Cancelar", type="secondary")
