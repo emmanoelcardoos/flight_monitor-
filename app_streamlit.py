@@ -412,7 +412,9 @@ def salvar_alerta_preco(email, itinerario, origem, destino, data_ida, preco_inic
 
 def registrar_pagamento_pendente(
     session_id, checkout_url, email, nome, apelido, offer_id, itinerario,
-    companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids
+    companhia, preco_exibido, moeda_exibida, valor_duffel_eur, trechos, pax_ids,
+    titulo=None, genero=None, data_nascimento=None, documento=None,
+    passaporte=None, validade_passaporte=None
 ):
     try:
         supabase = conectar_supabase()
@@ -433,6 +435,12 @@ def registrar_pagamento_pendente(
             "stripe_payment_status": "unpaid",
             "trechos_json": trechos,
             "pax_ids_json": pax_ids,
+            "titulo": titulo,
+            "genero": genero,
+            "data_nascimento": data_nascimento,
+            "documento": documento,
+            "passaporte": passaporte,
+            "validade_passaporte": validade_passaporte,
         }
 
         existente = (
@@ -697,7 +705,9 @@ def get_cotacao_ao_vivo():
 
 def criar_checkout_stripe(
     valor_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id,
-    companhia, preco_exibido, moeda_exibida, trechos, pax_ids
+    companhia, preco_exibido, moeda_exibida, trechos, pax_ids,
+    titulo=None, genero=None, data_nascimento=None, documento=None,
+    passaporte=None, validade_passaporte=None
 ):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     base_url = st.secrets.get("APP_BASE_URL", "https://flightmonitorec.streamlit.app")
@@ -744,6 +754,12 @@ def criar_checkout_stripe(
             valor_duffel_eur=valor_eur,
             trechos=trechos,
             pax_ids=pax_ids,
+            titulo=titulo,
+            genero=genero,
+            data_nascimento=data_nascimento,
+            documento=documento,
+            passaporte=passaporte,
+            validade_passaporte=validade_passaporte,
         )
         return session.url
     except Exception as e:
@@ -1315,20 +1331,26 @@ elif st.session_state.pagina == "reserva":
         else:
             if not pagamento_ok:
                 if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
-                    url_checkout = criar_checkout_stripe(
-                        valor_eur=float(v["valor_bruto_duffel"]),
-                        nome_pax=st.session_state["pax_nome"],
-                        apelido_pax=st.session_state["pax_apelido"],
-                        email_pax=st.session_state["pax_email"],
-                        itinerario=itinerario_curto,
-                        offer_id=v["id_offer"],
-                        companhia=v["Companhia"],
-                        preco_exibido=v["Preço"],
-                        moeda_exibida=v["Moeda"],
-                        trechos=trechos,
-                        pax_ids=v.get("pax_ids", []),
-                    )
-                    if url_checkout:
+                     url_checkout = criar_checkout_stripe(
+                         valor_eur=float(v["valor_bruto_duffel"]),
+                         nome_pax=st.session_state["pax_nome"],
+                         apelido_pax=st.session_state["pax_apelido"],
+                         email_pax=st.session_state["pax_email"],
+                         itinerario=itinerario_curto,
+                         offer_id=v["id_offer"],
+                         companhia=v["Companhia"],
+                         preco_exibido=v["Preço"],
+                         moeda_exibida=v["Moeda"],
+                         trechos=trechos,
+                         pax_ids=v.get("pax_ids", []),
+                         titulo=st.session_state.get("pax_titulo"),
+                         genero=st.session_state.get("pax_genero"),
+                         data_nascimento=st.session_state.get("pax_data_nascimento"),
+                         documento=st.session_state.get("pax_documento"),
+                         passaporte=st.session_state.get("pax_passaporte"),
+                         validade_passaporte=st.session_state.get("pax_validade_passaporte"),
+                     )
+                     if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
             else:
