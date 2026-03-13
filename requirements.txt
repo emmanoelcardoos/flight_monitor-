@@ -6,3 +6,6 @@ supabase
 postgrest
 realtime
 storage3
+fastapi
+uvicorn
+python-multipart
