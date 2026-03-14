@@ -189,7 +189,7 @@ def marcar_email_bilhete_enviado(session_id: str):
         return False
 
 
-def salvar_reserva_db(nome_completo, email, pnr, itinerario, valor, link_pdf=""):
+def salvar_reserva_db(nome_completo, email, pnr, itinerario, valor, link_pdf="", ticket_id=""):
     try:
         payload = {
             "email": email.strip().lower(),
@@ -199,6 +199,7 @@ def salvar_reserva_db(nome_completo, email, pnr, itinerario, valor, link_pdf="")
             "valor": valor,
             "status": "Emitido",
             "pdf_url": link_pdf,
+            "ticket_id": ticket_id,
         }
         supabase.table("reservas").insert(payload).execute()
         return True
@@ -470,18 +471,31 @@ async def stripe_webhook(
     moeda_pg = pagamento.get("moeda_exibida", "€")
     preco_pg = pagamento.get("preco_exibido", "0")
 
-    html_pagamento = montar_email_pagamento_recebido(
-        nome_cliente=nome_cliente if nome_cliente else "Cliente",
-        itinerario=itinerario_pg,
-        companhia=companhia_pg,
-        valor_total=f"{moeda_pg} {preco_pg}",
-    )
+    email_pagamento_enviado = bool(pagamento.get("email_pagamento_enviado", False))
 
-    enviado = enviar_email(
-        destinatario=email_cliente,
-        assunto="Pagamento confirmado • Reserva em processamento",
-        corpo_html=html_pagamento,
-    )
+    if email_pagamento_enviado:
+        print("[INFO] Email de pagamento já havia sido enviado anteriormente")
+    else:
+        html_pagamento = montar_email_pagamento_recebido(
+            nome_cliente=nome_cliente if nome_cliente else "Cliente",
+            itinerario=itinerario_pg,
+            companhia=companhia_pg,
+            valor_total=f"{moeda_pg} {preco_pg}",
+        )
+
+        enviado = enviar_email(
+            destinatario=email_cliente,
+            assunto="Pagamento confirmado • Reserva em processamento",
+            corpo_html=html_pagamento,
+        )
+
+        if enviado:
+            marcar_email_pagamento_enviado(session_id)
+            print(f"[OK] Email de pagamento enviado para {email_cliente}")
+        else:
+            print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
+
+    
 
     email_pagamento_enviado = bool(pagamento.get("email_pagamento_enviado", False))
 
