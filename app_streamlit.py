@@ -1427,7 +1427,7 @@ elif st.session_state.pagina == "reserva":
                     validade_passaporte=st.session_state.get("pax_validade_passaporte"),
                 )
                     
-                    if url_checkout:
+                if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
             else:
