@@ -428,12 +428,13 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail=f"Erro ao validar webhook: {e}")
 
     event_type = event.get("type", "")
-    if event_type != "checkout.session.completed":
-        print(f"[INFO] Evento ignorado: {event_type}")
-        return {"received": True}
     obj = event.get("data", {}).get("object", {})
 
     print(f"[WEBHOOK] Evento recebido: {event_type}")
+
+    if event_type != "checkout.session.completed":
+        print(f"[INFO] Evento ignorado: {event_type}")
+        return {"received": True}
 
     session_id = obj.get("id")
     payment_status = obj.get("payment_status", "")
@@ -491,8 +492,6 @@ async def stripe_webhook(
         else:
             print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
 
-   
-
     emissao_status = (pagamento.get("emissao_status") or "pendente").lower()
     if emissao_status == "emitido":
         print(f"[INFO] Bilhete já emitido anteriormente para session_id={session_id}")
@@ -525,7 +524,8 @@ async def stripe_webhook(
         primeiro_doc = documentos[0] or {}
         pdf_url = primeiro_doc.get("url", "") or primeiro_doc.get("document_url", "")
 
-    marcar_emissao_status(session_id, "emitido", pnr=pnr, pdf_url=pdf_url) 
+    marcar_emissao_status(session_id, "emitido", pnr=pnr, pdf_url=pdf_url)
+
     salvar_reserva_db(
         nome_completo=f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip(),
         email=pagamento.get("email", ""),
@@ -553,7 +553,6 @@ async def stripe_webhook(
         trechos=trechos,
         bagagem_info=bagagem_info,
         pdf_url=pdf_url,
-        
     )
 
     enviado_bilhete = enviar_email(
