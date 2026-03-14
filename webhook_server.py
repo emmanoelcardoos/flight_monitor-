@@ -427,6 +427,9 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail=f"Erro ao validar webhook: {e}")
 
     event_type = event.get("type", "")
+    if event_type != "checkout.session.completed":
+        print(f"[INFO] Evento ignorado: {event_type}")
+        return {"received": True}
     obj = event.get("data", {}).get("object", {})
 
     print(f"[WEBHOOK] Evento recebido: {event_type}")
@@ -480,10 +483,24 @@ async def stripe_webhook(
         corpo_html=html_pagamento,
     )
 
-    if enviado:
-        print(f"[OK] Email de pagamento enviado para {email_cliente}")
+    email_pagamento_enviado = bool(pagamento.get("email_pagamento_enviado", False))
+
+    if not email_pagamento_enviado:
+        enviado = enviar_email(
+            destinatario=email_cliente,
+            assunto="Pagamento confirmado • Reserva em processamento",
+            corpo_html=html_pagamento,
+        )
+
+        if enviado:
+            marcar_email_pagamento_enviado(session_id)
+            print(f"[OK] Email de pagamento enviado para {email_cliente}")
+        else:
+            print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
     else:
-        print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
+        print("[INFO] Email de pagamento já havia sido enviado anteriormente")
+
+   
 
     emissao_status = (pagamento.get("emissao_status") or "pendente").lower()
     if emissao_status == "emitido":
@@ -507,6 +524,9 @@ async def stripe_webhook(
 
     pnr = dados_ordem.get("booking_reference", "")
     documentos = dados_ordem.get("documents", [])
+    ticket_id = ""
+    if documentos:
+        ticket_id = documentos[0].get("unique_identifier", "")
     print("[DEBUG] documentos Duffel:", documentos)
 
     pdf_url = ""
@@ -522,6 +542,7 @@ async def stripe_webhook(
         itinerario=pagamento.get("itinerario", ""),
         valor=f"{moeda_pg} {preco_pg}",
         link_pdf=pdf_url,
+        ticket_id=ticket_id
     )
 
     email_bilhete_ja_enviado = bool(pagamento.get("email_bilhete_enviado", False))
@@ -541,6 +562,7 @@ async def stripe_webhook(
         trechos=trechos,
         bagagem_info=bagagem_info,
         pdf_url=pdf_url,
+        
     )
 
     enviado_bilhete = enviar_email(
