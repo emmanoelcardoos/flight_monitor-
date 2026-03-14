@@ -16,7 +16,7 @@ from supabase import create_client
 COMISSAO_PERCENTUAL = 0.12
 WHATSAPP_SUPORTE = "351936797003"
 NOME_PLANILHA = "Alertas_Flight_Monitor"
-NOME_AGENCIA = "Flight&Fun"
+NOME_AGENCIA = "FLIGHT&FUN"
 
 AEROPORTOS = {
     "São Paulo (GRU)": "GRU",
