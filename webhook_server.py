@@ -507,10 +507,14 @@ async def stripe_webhook(
 
     pnr = dados_ordem.get("booking_reference", "")
     documentos = dados_ordem.get("documents", [])
-    pdf_url = documentos[0]["url"] if documentos else ""
+    print("[DEBUG] documentos Duffel:", documentos)
 
-    marcar_emissao_status(session_id, "emitido", pnr=pnr, pdf_url=pdf_url)
+    pdf_url = ""
+    if documentos and isinstance(documentos, list):
+        primeiro_doc = documentos[0] or {}
+        pdf_url = primeiro_doc.get("url", "") or primeiro_doc.get("document_url", "")
 
+    marcar_emissao_status(session_id, "emitido", pnr=pnr, pdf_url=pdf_url) 
     salvar_reserva_db(
         nome_completo=f"{pagamento.get('nome', '')} {pagamento.get('apelido', '')}".strip(),
         email=pagamento.get("email", ""),
