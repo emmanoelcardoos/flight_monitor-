@@ -706,21 +706,31 @@ def get_cotacao_ao_vivo():
 
 
 def criar_checkout_stripe(
-        valor_checkout, moeda_checkout, valor_duffel_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id,
-        companhia, preco_exibido, moeda_exibida, trechos, pax_ids,
-        titulo=None, genero=None, data_nascimento=None, documento=None,
-        passaporte=None, validade_passaporte=None
-    
+    valor_checkout, moeda_checkout, valor_duffel_eur, nome_pax, apelido_pax, email_pax, itinerario, offer_id,
+    companhia, preco_exibido, moeda_exibida, trechos, pax_ids,
+    titulo=None, genero=None, data_nascimento=None, documento=None,
+    passaporte=None, validade_passaporte=None
 ):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
     base_url = st.secrets.get("APP_BASE_URL", "https://flightandfun.streamlit.app")
+
+    moeda_checkout = str(moeda_checkout).strip().lower()
+
+    mapa_moedas = {
+        "r$": "brl",
+        "brl": "brl",
+        "€": "eur",
+        "eur": "eur",
+    }
+
+    moeda_checkout = mapa_moedas.get(moeda_checkout, moeda_checkout)
 
     try:
         session = stripe.checkout.Session.create(
             payment_method_types=["card"],
             line_items=[{
                 "price_data": {
-                    "currency": moeda_checkout.lower(),
+                    "currency": moeda_checkout,
                     "product_data": {
                         "name": f"Voo: {itinerario}",
                         "description": f"Reserva aérea - {nome_pax} {apelido_pax}"
@@ -740,6 +750,8 @@ def criar_checkout_stripe(
                 "itinerario": itinerario,
                 "offer_id": offer_id,
                 "companhia": companhia,
+                "moeda_checkout": moeda_checkout.upper(),
+                "valor_checkout": str(valor_checkout),
             }
         )
 
@@ -765,6 +777,7 @@ def criar_checkout_stripe(
             validade_passaporte=validade_passaporte,
         )
         return session.url
+
     except Exception as e:
         st.error(f"Erro na Stripe: {e}")
         return None
@@ -1379,31 +1392,40 @@ elif st.session_state.pagina == "reserva":
         else:
             if not pagamento_ok:
                 if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
-                    moeda_checkout = str(v["Moeda"]).lower()
-                    valor_checkout = float(v["Preço"])
-                    valor_duffel_eur = float(v["valor_bruto_duffel"])
+                 
+                 
+                 moeda_raw = str(v["Moeda"]).strip().upper()
 
-                    url_checkout = criar_checkout_stripe(
-                        valor_checkout=valor_checkout,
-                        moeda_checkout=moeda_checkout,
-                        valor_duffel_eur=valor_duffel_eur,
-                        nome_pax=st.session_state["pax_nome"],
-                        apelido_pax=st.session_state["pax_apelido"],
-                        email_pax=st.session_state["pax_email"],
-                        itinerario=itinerario_curto,
-                        offer_id=v["id_offer"],
-                        companhia=v["Companhia"],
-                        preco_exibido=v["Preço"],
-                        moeda_exibida=v["Moeda"],
-                        trechos=trechos,
-                        pax_ids=v.get("pax_ids", []),
-                        titulo=st.session_state.get("pax_titulo"),
-                        genero=st.session_state.get("pax_genero"),
-                        data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
-                        documento=st.session_state.get("pax_documento"),
-                        passaporte=st.session_state.get("pax_passaporte"),
-                        validade_passaporte=st.session_state.get("pax_validade_passaporte"),
-                    )
+                 if moeda_raw in ["R$", "BRL"]:
+                     moeda_checkout = "brl"
+                 elif moeda_raw in ["€", "EUR"]:
+                     moeda_checkout = "eur"
+                 else:
+                      moeda_checkout = moeda_raw.lower()
+                valor_checkout = float(v["Preço"])
+                valor_duffel_eur = float(v["valor_bruto_duffel"])
+
+                url_checkout = criar_checkout_stripe(
+                    valor_checkout=valor_checkout,
+                    moeda_checkout=moeda_checkout,
+                    valor_duffel_eur=valor_duffel_eur,
+                    nome_pax=st.session_state["pax_nome"],
+                    apelido_pax=st.session_state["pax_apelido"],
+                    email_pax=st.session_state["pax_email"],
+                    itinerario=itinerario_curto,
+                    offer_id=v["id_offer"],
+                    companhia=v["Companhia"],
+                    preco_exibido=v["Preço"],
+                    moeda_exibida=v["Moeda"],
+                    trechos=trechos,
+                    pax_ids=v.get("pax_ids", []),
+                    titulo=st.session_state.get("pax_titulo"),
+                    genero=st.session_state.get("pax_genero"),
+                    data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
+                    documento=st.session_state.get("pax_documento"),
+                    passaporte=st.session_state.get("pax_passaporte"),
+                    validade_passaporte=st.session_state.get("pax_validade_passaporte"),
+                )
                     
                     if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
