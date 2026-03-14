@@ -435,10 +435,6 @@ async def stripe_webhook(
 
     print(f"[WEBHOOK] Evento recebido: {event_type}")
 
-    if event_type != "checkout.session.completed":
-        print(f"[INFO] Evento ignorado: {event_type}")
-        return {"received": True}
-
     session_id = obj.get("id")
     payment_status = obj.get("payment_status", "")
     customer_email = obj.get("customer_email", "")
@@ -494,25 +490,6 @@ async def stripe_webhook(
             print(f"[OK] Email de pagamento enviado para {email_cliente}")
         else:
             print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
-
-    
-
-    email_pagamento_enviado = bool(pagamento.get("email_pagamento_enviado", False))
-
-    if not email_pagamento_enviado:
-        enviado = enviar_email(
-            destinatario=email_cliente,
-            assunto="Pagamento confirmado • Reserva em processamento",
-            corpo_html=html_pagamento,
-        )
-
-        if enviado:
-            marcar_email_pagamento_enviado(session_id)
-            print(f"[OK] Email de pagamento enviado para {email_cliente}")
-        else:
-            print(f"[ERRO] Falha ao enviar email de pagamento para {email_cliente}")
-    else:
-        print("[INFO] Email de pagamento já havia sido enviado anteriormente")
 
    
 
