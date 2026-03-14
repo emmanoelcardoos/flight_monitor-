@@ -16,7 +16,7 @@ from supabase import create_client
 COMISSAO_PERCENTUAL = 0.12
 WHATSAPP_SUPORTE = "351936797003"
 NOME_PLANILHA = "Alertas_Flight_Monitor"
-NOME_AGENCIA = "Flight Monitor Premium"
+NOME_AGENCIA = "Flight&Fun"
 
 AEROPORTOS = {
     "São Paulo (GRU)": "GRU",
@@ -431,16 +431,12 @@ def registrar_pagamento_pendente(
             "preco_exibido": preco_exibido,
             "moeda_exibida": moeda_exibida,
             "valor_duffel_eur": valor_duffel_eur,
+            "offer_total_amount": str(valor_duffel_eur),
+            "offer_total_currency": "EUR",
             "status_pagamento": "PENDENTE",
             "stripe_payment_status": "unpaid",
             "trechos_json": trechos,
             "pax_ids_json": pax_ids,
-        "titulo": titulo,
-        "genero": genero,
-        "data_nascimento": data_nascimento,
-        "documento": documento,
-        "passaporte": passaporte,
-        "validade_passaporte": validade_passaporte,
             "titulo": titulo,
             "genero": genero,
             "data_nascimento": data_nascimento,
@@ -689,7 +685,7 @@ def montar_email_bilhete_emitido(
             </div>
 
             <div style="padding: 18px; text-align:center; background:#0f172a; color:#d1d5db; font-size: 12px;">
-                © {datetime.now().year} Flight Monitor Premium
+                © {datetime.now().year} Flight&Fun Trips
             </div>
         </div>
     </body>
@@ -716,7 +712,7 @@ def criar_checkout_stripe(
     passaporte=None, validade_passaporte=None
 ):
     stripe.api_key = st.secrets.get("STRIPE_SECRET_KEY")
-    base_url = st.secrets.get("APP_BASE_URL", "https://flightmonitorec.streamlit.app")
+    base_url = st.secrets.get("APP_BASE_URL", "https://flightandfun.streamlit.app")
 
     try:
         session = stripe.checkout.Session.create(
@@ -925,7 +921,7 @@ def render_card_voo(v, idx):
 # =========================================================
 # APP CONFIG
 # =========================================================
-st.set_page_config(page_title="Flight Monitor GDS", page_icon="✈️", layout="wide")
+st.set_page_config(page_title="Flight&Fun", page_icon="✈️", layout="wide")
 
 if "pagina" not in st.session_state:
     st.session_state.pagina = "busca"
@@ -953,7 +949,7 @@ if st.query_params.get("pagamento") == "sucesso":
     st.session_state.pagina = "sucesso"
 
 with st.sidebar:
-    st.title("📌 Flight Monitor")
+    st.title("📌 Flight&Fun")
 
     tema_escolhido = st.selectbox(
         "🎨 Estilo visual",

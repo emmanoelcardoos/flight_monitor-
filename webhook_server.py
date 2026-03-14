@@ -111,7 +111,7 @@ def montar_email_pagamento_recebido(nome_cliente: str, itinerario: str, companhi
             </div>
 
             <div style="padding: 18px; text-align:center; background:#111827; color:#d1d5db; font-size: 12px;">
-                © {datetime.now().year} Flight Monitor Premium
+                © {datetime.now().year} Flight&Fun Trips
             </div>
         </div>
     </body>
@@ -310,7 +310,7 @@ def montar_email_bilhete_emitido(
             </div>
 
             <div style="padding: 18px; text-align:center; background:#0f172a; color:#d1d5db; font-size: 12px;">
-                © {datetime.now().year} Flight Monitor Premium
+                © {datetime.now().year} Flight&Fun Trips
             </div>
         </div>
     </body>
@@ -339,6 +339,13 @@ def emitir_bilhete_duffel(pagamento: dict):
             "data": {
                 "type": "instant",
                 "selected_offers": [pagamento["offer_id"]],
+                "payments": [
+                    {
+                        "type": "balance",
+                        "currency": pagamento.get("offer_total_currency", "EUR"),
+                        "amount": str(pagamento.get("offer_total_amount", pagamento.get("valor_duffel_eur", "0"))),
+                    }
+                ],
                 "passengers": [{
                     "id": pax_ids[0],
                     "title": pagamento.get("titulo"),
@@ -349,7 +356,6 @@ def emitir_bilhete_duffel(pagamento: dict):
                     "email": pagamento.get("email"),
                     "phone_number": "+351936797003",
                 }],
-                "payments": []
             }
         }
 
