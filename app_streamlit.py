@@ -1392,42 +1392,41 @@ elif st.session_state.pagina == "reserva":
         else:
             if not pagamento_ok:
                 if st.button("🔐 GERAR LINK DE PAGAMENTO", use_container_width=True, type="primary"):
-                 
-                 
-                 moeda_raw = str(v["Moeda"]).strip().upper()
+                    moeda_raw = str(v["Moeda"]).strip().upper()
 
-                 if moeda_raw in ["R$", "BRL"]:
-                     moeda_checkout = "brl"
-                 elif moeda_raw in ["€", "EUR"]:
-                     moeda_checkout = "eur"
-                 else:
-                      moeda_checkout = moeda_raw.lower()
-                valor_checkout = float(v["Preço"])
-                valor_duffel_eur = float(v["valor_bruto_duffel"])
+                    if moeda_raw in ["R$", "BRL"]:
+                        moeda_checkout = "brl"
+                    elif moeda_raw in ["€", "EUR"]:
+                        moeda_checkout = "eur"
+                    else:
+                        moeda_checkout = moeda_raw.lower()
 
-                url_checkout = criar_checkout_stripe(
-                    valor_checkout=valor_checkout,
-                    moeda_checkout=moeda_checkout,
-                    valor_duffel_eur=valor_duffel_eur,
-                    nome_pax=st.session_state["pax_nome"],
-                    apelido_pax=st.session_state["pax_apelido"],
-                    email_pax=st.session_state["pax_email"],
-                    itinerario=itinerario_curto,
-                    offer_id=v["id_offer"],
-                    companhia=v["Companhia"],
-                    preco_exibido=v["Preço"],
-                    moeda_exibida=v["Moeda"],
-                    trechos=trechos,
-                    pax_ids=v.get("pax_ids", []),
-                    titulo=st.session_state.get("pax_titulo"),
-                    genero=st.session_state.get("pax_genero"),
-                    data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
-                    documento=st.session_state.get("pax_documento"),
-                    passaporte=st.session_state.get("pax_passaporte"),
-                    validade_passaporte=st.session_state.get("pax_validade_passaporte"),
-                )
-                    
-                if url_checkout:
+                    valor_checkout = float(v["Preço"])
+                    valor_duffel_eur = float(v["valor_bruto_duffel"])
+
+                    url_checkout = criar_checkout_stripe(
+                        valor_checkout=valor_checkout,
+                        moeda_checkout=moeda_checkout,
+                        valor_duffel_eur=valor_duffel_eur,
+                        nome_pax=st.session_state["pax_nome"],
+                        apelido_pax=st.session_state["pax_apelido"],
+                        email_pax=st.session_state["pax_email"],
+                        itinerario=itinerario_curto,
+                        offer_id=v["id_offer"],
+                        companhia=v["Companhia"],
+                        preco_exibido=v["Preço"],
+                        moeda_exibida=v["Moeda"],
+                        trechos=trechos,
+                        pax_ids=v.get("pax_ids", []),
+                        titulo=st.session_state.get("pax_titulo"),
+                        genero=st.session_state.get("pax_genero"),
+                        data_nascimento=st.session_state.get("pax_data_nascimento") or st.session_state.get("pax_nascimento"),
+                        documento=st.session_state.get("pax_documento"),
+                        passaporte=st.session_state.get("pax_passaporte"),
+                        validade_passaporte=st.session_state.get("pax_validade_passaporte"),
+                    )
+
+                    if url_checkout:
                         st.success("Link de pagamento gerado com sucesso.")
                         st.link_button("🚀 PAGAR AGORA", url_checkout, use_container_width=True)
             else:
